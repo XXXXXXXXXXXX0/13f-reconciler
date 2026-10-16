@@ -24,8 +24,8 @@ fund manager, compares the most recent two quarters, and outputs the differences
 | Prior / Current Period | Reporting period end dates |
 | Prior / Current Shares | Share counts as reported |
 | Share Change | Current minus prior (negative = decrease) |
-| Prior / Current Market Value ($000s) | Market value in thousands as reported |
-| Market Value Change ($000s) | Current minus prior |
+| Prior / Current Market Value ($) | Market value in whole US dollars as reported (SEC switched from thousands in 2023) |
+| Market Value Change ($) | Current minus prior |
 | Prior / Current Filing Date | Date each 13F was filed with the SEC |
 | Notes | `Name changed`, `CUSIP changed`, or blank |
 

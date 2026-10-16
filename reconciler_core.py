@@ -14,6 +14,7 @@ from urllib.error import HTTPError, URLError
 from xml.etree import ElementTree as ET
 
 EDGAR_BASE = "https://data.sec.gov"
+ARCHIVE_BASE = "https://www.sec.gov"  # filing documents live here, not on data.sec.gov
 USER_AGENT = "13F-Reconciler angelagr2@aol.com"
 
 HEADERS = {
@@ -134,7 +135,7 @@ def _collect_filings(raw: dict, cik: str, out: list, limit: int) -> None:
         acc_nodash = accessions[i].replace("-", "")
         primary = primary_docs[i] if i < len(primary_docs) else ""
         doc_url = (
-            f"{EDGAR_BASE}/Archives/edgar/data/{int(cik)}/{acc_nodash}/{primary}"
+            f"{ARCHIVE_BASE}/Archives/edgar/data/{int(cik)}/{acc_nodash}/{primary}"
         )
         out.append(FilingMeta(
             accession=accessions[i],
@@ -155,7 +156,7 @@ class Holding:
     ticker: str
     option_type: str          # "Call", "Put", or ""
     shares: int
-    market_value: int         # in thousands as reported by SEC
+    market_value: int         # whole US dollars as reported (since 2023)
     investment_discretion: str
     voting_authority_sole: int
     voting_authority_shared: int
@@ -244,35 +245,24 @@ def parse_info_table_xml(xml_text: str) -> list[Holding]:
 def _find_info_table_url(cik: str, filing: FilingMeta) -> str:
     """Locate the information table XML document URL within a filing."""
     acc_nodash = filing.accession.replace("-", "")
-    index_url = (
-        f"{EDGAR_BASE}/Archives/edgar/data/{int(cik)}/{acc_nodash}/"
-        f"{filing.accession}-index.json"
-    )
+    base = f"{ARCHIVE_BASE}/Archives/edgar/data/{int(cik)}/{acc_nodash}"
     try:
-        idx = _get_json(index_url)
+        idx = _get_json(f"{base}/index.json")
     except Exception:
         return filing.primary_doc
 
-    # Prefer document explicitly typed as INFORMATION TABLE
-    for doc in idx.get("documents", []):
-        doc_type = doc.get("type", "").upper()
-        desc = doc.get("description", "").lower()
-        name = doc.get("name", "").lower()
-        if (doc_type == "INFORMATION TABLE"
-                or "information table" in desc
-                or ("infotable" in name and name.endswith(".xml"))):
-            return (
-                f"{EDGAR_BASE}/Archives/edgar/data/{int(cik)}/{acc_nodash}/{doc['name']}"
-            )
+    names = [item.get("name", "") for item in idx.get("directory", {}).get("item", [])]
+    xml_names = [n for n in names if n.lower().endswith(".xml")]
 
-    # Fall back: any secondary XML file
-    for doc in idx.get("documents", []):
-        name = doc.get("name", "").lower()
-        doc_type = doc.get("type", "").upper()
-        if name.endswith(".xml") and doc_type not in ("13F-HR", "13F-HR/A"):
-            return (
-                f"{EDGAR_BASE}/Archives/edgar/data/{int(cik)}/{acc_nodash}/{doc['name']}"
-            )
+    # Prefer the document named like an information table
+    for name in xml_names:
+        if "infotable" in name.lower() or "information" in name.lower():
+            return f"{base}/{name}"
+
+    # Fall back: any XML file other than the primary doc
+    for name in xml_names:
+        if name.lower() != "primary_doc.xml":
+            return f"{base}/{name}"
 
     return filing.primary_doc
 
@@ -292,7 +282,7 @@ def fetch_holdings(cik: str, filing: FilingMeta) -> list[Holding]:
             if not xml_rel.startswith("http"):
                 acc_nodash = filing.accession.replace("-", "")
                 xml_rel = (
-                    f"{EDGAR_BASE}/Archives/edgar/data/{int(cik)}/{acc_nodash}/{xml_rel}"
+                    f"{ARCHIVE_BASE}/Archives/edgar/data/{int(cik)}/{acc_nodash}/{xml_rel}"
                 )
             text = _get_text(xml_rel)
 

@@ -41,9 +41,9 @@ DETAIL_HEADERS = [
     "Prior Shares",
     "Current Shares",
     "Share Change",
-    "Prior Market Value ($000s)",
-    "Current Market Value ($000s)",
-    "Market Value Change ($000s)",
+    "Prior Market Value ($)",
+    "Current Market Value ($)",
+    "Market Value Change ($)",
     "Prior Filing Date",
     "Current Filing Date",
     "Notes",
@@ -52,7 +52,7 @@ DETAIL_HEADERS = [
 SUMMARY_HEADERS = [
     "Category",
     "Position Count",
-    "Aggregate Market Value ($000s)",
+    "Aggregate Market Value ($)",
 ]
 
 
