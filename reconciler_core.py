@@ -6,7 +6,7 @@ No I/O — pure functions operating on data structures.
 import re
 import time
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -156,6 +156,7 @@ class Holding:
     ticker: str
     option_type: str          # "Call", "Put", or ""
     shares: int
+    share_type: str           # "SH" (shares) or "PRN" (principal amount, not shares)
     market_value: int         # whole US dollars as reported (since 2023)
     investment_discretion: str
     voting_authority_sole: int
@@ -209,8 +210,10 @@ def parse_info_table_xml(xml_text: str) -> list[Holding]:
 
         ssh_elem = _find_elem(entry, "shrsOrPrnAmt")
         shares = 0
+        share_type = "SH"
         if ssh_elem is not None:
             shares = _safe_int(_find_text(ssh_elem, "sshPrnamt"))
+            share_type = _find_text(ssh_elem, "sshPrnamtType").upper() or "SH"
 
         va_elem = _find_elem(entry, "votingAuthority")
         va_sole = va_shared = va_none = 0
@@ -228,6 +231,7 @@ def parse_info_table_xml(xml_text: str) -> list[Holding]:
             ticker="",
             option_type=option_type,
             shares=shares,
+            share_type=share_type,
             market_value=_safe_int(_find_text(entry, "value")),
             investment_discretion=_find_text(entry, "investmentDiscretion"),
             voting_authority_sole=va_sole,
@@ -305,6 +309,7 @@ class PositionChange:
     cusip: str
     ticker: str
     option_type: str
+    share_type: str         # "SH" or "PRN"; PRN amounts are not share counts
     prior_shares: int
     current_shares: int
     share_change: int
@@ -318,13 +323,37 @@ class PositionChange:
     note: str               # e.g. "Name changed", "CUSIP changed"
 
 
-def _holding_key(h: Holding) -> tuple[str, str]:
-    """(CUSIP, option_type) — stable across name/ticker changes."""
-    return (h.cusip.upper().strip(), h.option_type.lower())
+def _holding_key(h: Holding) -> tuple[str, str, str]:
+    """(CUSIP, option_type, share_type) — stable across name/ticker changes."""
+    return (h.cusip.upper().strip(), h.option_type.lower(), h.share_type)
 
 
-def _name_key(h: Holding) -> str:
-    return re.sub(r"[^a-z0-9]", "", h.issuer_name.lower())
+def _name_key(h: Holding) -> tuple[str, str, str]:
+    """Issuer name plus option/share type, so a put never matches the common stock."""
+    return (re.sub(r"[^a-z0-9]", "", h.issuer_name.lower()), h.option_type.lower(), h.share_type)
+
+
+def aggregate_holdings(holdings: list[Holding]) -> list[Holding]:
+    """
+    Sum rows that share a (CUSIP, option_type, share_type) key.
+
+    A 13F lists one row per sub-manager / discretion type, so the same CUSIP
+    commonly appears on several rows. Comparing quarters on single rows would
+    silently drop all but one of them.
+    """
+    merged: dict[tuple, Holding] = {}
+    for h in holdings:
+        key = _holding_key(h)
+        if key not in merged:
+            merged[key] = replace(h)
+            continue
+        m = merged[key]
+        m.shares += h.shares
+        m.market_value += h.market_value
+        m.voting_authority_sole += h.voting_authority_sole
+        m.voting_authority_shared += h.voting_authority_shared
+        m.voting_authority_none += h.voting_authority_none
+    return list(merged.values())
 
 
 def compare_holdings(
@@ -337,10 +366,12 @@ def compare_holdings(
     Compare two quarters of holdings and return classified position changes,
     sorted by absolute share count change descending.
     """
+    prior = aggregate_holdings(prior)
+    current = aggregate_holdings(current)
     prior_map: dict[tuple, Holding] = {_holding_key(h): h for h in prior}
     current_map: dict[tuple, Holding] = {_holding_key(h): h for h in current}
-    prior_name_map: dict[str, Holding] = {_name_key(h): h for h in prior}
-    current_name_map: dict[str, Holding] = {_name_key(h): h for h in current}
+    prior_name_map: dict[tuple, Holding] = {_name_key(h): h for h in prior}
+    current_name_map: dict[tuple, Holding] = {_name_key(h): h for h in current}
 
     results: list[PositionChange] = []
     matched_prior_keys: set[tuple] = set()
@@ -356,6 +387,7 @@ def compare_holdings(
             cusip=cur.cusip if cur else (pri.cusip if pri else ""),
             ticker=cur.ticker if cur else (pri.ticker if pri else ""),
             option_type=cur.option_type if cur else (pri.option_type if pri else ""),
+            share_type=cur.share_type if cur else (pri.share_type if pri else "SH"),
             prior_shares=pri.shares if pri else 0,
             current_shares=cur.shares if cur else 0,
             share_change=share_delta,
@@ -381,7 +413,7 @@ def compare_holdings(
         else:
             # Name-based fallback for CUSIP reissuance
             nk = _name_key(cur)
-            if nk in prior_name_map:
+            if nk in prior_name_map and _holding_key(prior_name_map[nk]) not in matched_prior_keys:
                 pri = prior_name_map[nk]
                 matched_prior_keys.add(_holding_key(pri))
                 note = "CUSIP changed"
@@ -408,3 +440,94 @@ def compare_holdings(
 
     results.sort(key=lambda x: abs(x.share_change), reverse=True)
     return results
+
+
+# ---------------------------------------------------------------------------
+# Largest movers (ranked by share count)
+# ---------------------------------------------------------------------------
+
+TOP_SECTIONS = ("New", "Closed", "Increase", "Decrease")
+
+
+def top_movers(changes: list[PositionChange], n: int = 10) -> dict[str, list[PositionChange]]:
+    """
+    Top-n positions per section, ranked by share count (not market value).
+
+    New / Closed rank by the full position size; Increase / Decrease rank by
+    the size of the change in shares, where a decrease is current minus prior
+    shares for the same CUSIP (13F filings never report a negative count).
+    PRN rows are principal amounts, not shares, so they are excluded.
+    """
+    shares_only = [c for c in changes if c.share_type == "SH"]
+
+    def size(c: PositionChange) -> int:
+        if c.category == "New":
+            return c.current_shares
+        if c.category == "Closed":
+            return c.prior_shares
+        return abs(c.share_change)
+
+    picks = {
+        "New": [c for c in shares_only if c.category == "New"],
+        "Closed": [c for c in shares_only if c.category == "Closed"],
+        "Increase": [c for c in shares_only if c.category == "Changed" and c.share_change > 0],
+        "Decrease": [c for c in shares_only if c.category == "Changed" and c.share_change < 0],
+    }
+    return {k: sorted(v, key=size, reverse=True)[:n] for k, v in picks.items()}
+
+
+# ---------------------------------------------------------------------------
+# CUSIP -> ticker (13F filings carry no tickers)
+# ---------------------------------------------------------------------------
+
+OPENFIGI_URL = "https://api.openfigi.com/v3/mapping"
+
+
+def _post_json(url: str, payload: list, headers: dict) -> list:
+    req = Request(url, data=json.dumps(payload).encode(), method="POST",
+                  headers={"Content-Type": "application/json", **headers})
+    with urlopen(req, timeout=30) as resp:
+        return json.loads(resp.read())
+
+
+def _pick_ticker(matches: list[dict]) -> str:
+    """Prefer the US composite listing, else the first match that has a ticker."""
+    with_ticker = [m for m in matches if m.get("ticker")]
+    for m in with_ticker:
+        if m.get("exchCode") == "US":
+            return m["ticker"]
+    return with_ticker[0]["ticker"] if with_ticker else ""
+
+
+def lookup_tickers(cusips: list[str], api_key: Optional[str] = None,
+                   post=_post_json, sleep=time.sleep) -> dict[str, str]:
+    """
+    Map CUSIPs to tickers with the OpenFIGI API (free; set OPENFIGI_API_KEY for
+    higher limits). Returns only the CUSIPs it resolved; never raises, so a
+    blocked or rate-limited lookup just leaves tickers blank.
+    """
+    unique = list(dict.fromkeys(c.strip().upper() for c in cusips if c.strip()))
+    batch = 100 if api_key else 10          # per-request job limit
+    pause = 0.3 if api_key else 2.6         # 25 req/min without a key
+    headers = {"X-OPENFIGI-APIKEY": api_key} if api_key else {}
+    found: dict[str, str] = {}
+    for i in range(0, len(unique), batch):
+        chunk = unique[i:i + batch]
+        jobs = [{"idType": "ID_CUSIP", "idValue": c} for c in chunk]
+        try:
+            try:
+                results = post(OPENFIGI_URL, jobs, headers)
+            except HTTPError as e:
+                if e.code != 429:
+                    raise
+                sleep(30)
+                results = post(OPENFIGI_URL, jobs, headers)
+        except (HTTPError, URLError, OSError, ValueError) as e:
+            print(f"  WARNING: ticker lookup failed ({e}); tickers left blank.")
+            return found
+        for cusip, res in zip(chunk, results):
+            ticker = _pick_ticker(res.get("data", [])) if isinstance(res, dict) else ""
+            if ticker:
+                found[cusip] = ticker
+        sleep(pause)
+    return found

@@ -102,7 +102,10 @@ CURRENT_XML = textwrap.dedent("""\
 
 # Import functions under test
 sys.path.insert(0, str(Path(__file__).parent))
-from reconciler_core import parse_info_table_xml, compare_holdings, FilingMeta
+from reconciler_core import (
+    parse_info_table_xml, compare_holdings, FilingMeta, Holding,
+    aggregate_holdings, top_movers, lookup_tickers,
+)
 
 
 def make_filing(period: str, filed: str) -> FilingMeta:
@@ -167,8 +170,88 @@ def test_compare():
               f"shares_chg={c.share_change:+,}  opt={c.option_type or 'equity'}")
 
 
+def H(name, cusip, shares, mv=0, opt="", st="SH"):
+    return Holding(name, cusip, "", opt, shares, st, mv, "SOLE", shares, 0, 0)
+
+
+def test_duplicate_cusip_rows_are_summed():
+    """One CUSIP on several rows (per sub-manager) must be summed, not overwritten."""
+    prior = [H("ACME", "111111111", 100, 10), H("ACME", "111111111", 300, 30)]
+    current = [H("ACME", "111111111", 150, 15), H("ACME", "111111111", 100, 10)]
+    assert aggregate_holdings(prior)[0].shares == 400
+    changes = compare_holdings(prior, current, make_filing("a", "a"), make_filing("b", "b"))
+    assert len(changes) == 1
+    assert changes[0].prior_shares == 400 and changes[0].current_shares == 250
+    assert changes[0].share_change == -150 and changes[0].direction == "Decrease"
+    print("  duplicate CUSIP aggregation: PASS")
+
+
+def test_name_fallback_does_not_match_across_option_types():
+    """A new put must not be treated as a CUSIP change of the same issuer's common stock."""
+    prior = [H("ACME", "111111111", 100)]
+    current = [H("ACME", "222222222", 100, opt="Put")]
+    cats = sorted(c.category for c in compare_holdings(prior, current, make_filing("a", "a"), make_filing("b", "b")))
+    assert cats == ["Closed", "New"]
+    print("  name fallback respects option type: PASS")
+
+
+def test_top_movers_rank_by_shares_not_value():
+    prior = [H("BIG VALUE", "A", 100, 9_000_000), H("MANY SHARES", "B", 100, 1_000),
+             H("GONE SMALL", "C", 5, 9_000_000), H("GONE BIG", "D", 5_000, 1_000)]
+    current = [H("NEW SMALL", "E", 10, 9_000_000), H("NEW BIG", "F", 9_000, 1_000),
+               H("BIG VALUE", "A", 150, 99_000_000), H("MANY SHARES", "B", 40_100, 1_500),
+               H("BOND", "G", 99_999_999, 5, st="PRN")]
+    changes = compare_holdings(prior, current, make_filing("a", "a"), make_filing("b", "b"))
+    top = top_movers(changes, 5)
+    assert [c.issuer_name_current for c in top["New"]] == ["NEW BIG", "NEW SMALL"]
+    assert [c.issuer_name_prior for c in top["Closed"]] == ["GONE BIG", "GONE SMALL"]
+    assert [c.issuer_name_current for c in top["Increase"]] == ["MANY SHARES", "BIG VALUE"]
+    assert top["Decrease"] == []
+    assert all(c.share_type == "SH" for rows in top.values() for c in rows)  # PRN excluded
+    print("  top_movers by share count: PASS")
+
+
+def test_decrease_is_computed_from_prior_filing():
+    """Filings report positive counts only; a cut shows up as current - prior < 0."""
+    changes = compare_holdings([H("CUT", "Z", 1_000)], [H("CUT", "Z", 400)],
+                               make_filing("a", "a"), make_filing("b", "b"))
+    assert changes[0].share_change == -600 and changes[0].direction == "Decrease"
+    assert top_movers(changes)["Decrease"][0].share_change == -600
+    print("  decrease computed vs prior: PASS")
+
+
+def test_lookup_tickers_with_mocked_openfigi():
+    calls = []
+
+    def fake_post(url, jobs, headers):
+        calls.append(len(jobs))
+        out = []
+        for j in jobs:
+            if j["idValue"] == "AAA":
+                out.append({"data": [{"ticker": "AAA.F", "exchCode": "GR"},
+                                     {"ticker": "AAA", "exchCode": "US"}]})
+            else:
+                out.append({"warning": "No identifier found."})
+        return out
+
+    got = lookup_tickers(["aaa", "AAA", "BBB"] + [f"X{i}" for i in range(11)],
+                         post=fake_post, sleep=lambda s: None)
+    assert got == {"AAA": "AAA"}
+    assert calls == [10, 3]          # de-duplicated, batched 10 per request without a key
+
+    def boom(url, jobs, headers):
+        raise OSError("blocked")
+    assert lookup_tickers(["AAA"], post=boom, sleep=lambda s: None) == {}
+    print("  lookup_tickers: PASS")
+
+
 if __name__ == "__main__":
     print("Running tests...")
     test_parse()
     test_compare()
+    test_duplicate_cusip_rows_are_summed()
+    test_name_fallback_does_not_match_across_option_types()
+    test_top_movers_rank_by_shares_not_value()
+    test_decrease_is_computed_from_prior_filing()
+    test_lookup_tickers_with_mocked_openfigi()
     print("\nAll tests passed.")

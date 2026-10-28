@@ -20,7 +20,7 @@ fund manager, compares the most recent two quarters, and outputs the differences
 | Issuer Name (Current Quarter) | Name as reported in the current filing |
 | Issuer Name (Prior Quarter) | Name as reported in the prior filing |
 | CUSIP | 9-character CUSIP (stable identifier; used for cross-quarter matching) |
-| Ticker | Populated if available from the filing |
+| Ticker | 13F filings carry no tickers; resolved from the CUSIP via OpenFIGI (see `--tickers`) |
 | Prior / Current Period | Reporting period end dates |
 | Prior / Current Shares | Share counts as reported |
 | Share Change | Current minus prior (negative = decrease) |
@@ -28,6 +28,19 @@ fund manager, compares the most recent two quarters, and outputs the differences
 | Market Value Change ($) | Current minus prior |
 | Prior / Current Filing Date | Date each 13F was filed with the SEC |
 | Notes | `Name changed`, `CUSIP changed`, or blank |
+
+### Largest movers (bottom of the summary CSV)
+
+Top 10 New, Closed, Increase and Decrease positions, **ranked by share count** (not market
+value), with ticker. Filings only ever report positive counts, so an increase or decrease is
+computed as current minus prior shares for the same CUSIP + option type. Rows for the same
+CUSIP (one per sub-manager) are summed first. Bond rows (principal amount, not shares) are
+left out of these tables. For options, shares are the underlying share count.
+
+Tickers use the free OpenFIGI API (`api.openfigi.com`). `--tickers top` (default) looks up only
+these tables, `--tickers all` fills the detail CSV too (about 25 requests/minute without a key;
+set `OPENFIGI_API_KEY` for more), `--tickers none` skips it. If the lookup fails, tickers stay
+blank.
 
 ### Summary CSV rows
 
