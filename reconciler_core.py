@@ -6,7 +6,7 @@ No I/O — pure functions operating on data structures.
 import re
 import time
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -14,6 +14,7 @@ from urllib.error import HTTPError, URLError
 from xml.etree import ElementTree as ET
 
 EDGAR_BASE = "https://data.sec.gov"
+ARCHIVE_BASE = "https://www.sec.gov"  # filing documents live here, not on data.sec.gov
 USER_AGENT = "13F-Reconciler angelagr2@aol.com"
 
 HEADERS = {
@@ -134,7 +135,7 @@ def _collect_filings(raw: dict, cik: str, out: list, limit: int) -> None:
         acc_nodash = accessions[i].replace("-", "")
         primary = primary_docs[i] if i < len(primary_docs) else ""
         doc_url = (
-            f"{EDGAR_BASE}/Archives/edgar/data/{int(cik)}/{acc_nodash}/{primary}"
+            f"{ARCHIVE_BASE}/Archives/edgar/data/{int(cik)}/{acc_nodash}/{primary}"
         )
         out.append(FilingMeta(
             accession=accessions[i],
@@ -155,7 +156,8 @@ class Holding:
     ticker: str
     option_type: str          # "Call", "Put", or ""
     shares: int
-    market_value: int         # in thousands as reported by SEC
+    share_type: str           # "SH" (shares) or "PRN" (principal amount, not shares)
+    market_value: int         # whole US dollars as reported (since 2023)
     investment_discretion: str
     voting_authority_sole: int
     voting_authority_shared: int
@@ -208,8 +210,10 @@ def parse_info_table_xml(xml_text: str) -> list[Holding]:
 
         ssh_elem = _find_elem(entry, "shrsOrPrnAmt")
         shares = 0
+        share_type = "SH"
         if ssh_elem is not None:
             shares = _safe_int(_find_text(ssh_elem, "sshPrnamt"))
+            share_type = _find_text(ssh_elem, "sshPrnamtType").upper() or "SH"
 
         va_elem = _find_elem(entry, "votingAuthority")
         va_sole = va_shared = va_none = 0
@@ -227,6 +231,7 @@ def parse_info_table_xml(xml_text: str) -> list[Holding]:
             ticker="",
             option_type=option_type,
             shares=shares,
+            share_type=share_type,
             market_value=_safe_int(_find_text(entry, "value")),
             investment_discretion=_find_text(entry, "investmentDiscretion"),
             voting_authority_sole=va_sole,
@@ -244,35 +249,24 @@ def parse_info_table_xml(xml_text: str) -> list[Holding]:
 def _find_info_table_url(cik: str, filing: FilingMeta) -> str:
     """Locate the information table XML document URL within a filing."""
     acc_nodash = filing.accession.replace("-", "")
-    index_url = (
-        f"{EDGAR_BASE}/Archives/edgar/data/{int(cik)}/{acc_nodash}/"
-        f"{filing.accession}-index.json"
-    )
+    base = f"{ARCHIVE_BASE}/Archives/edgar/data/{int(cik)}/{acc_nodash}"
     try:
-        idx = _get_json(index_url)
+        idx = _get_json(f"{base}/index.json")
     except Exception:
         return filing.primary_doc
 
-    # Prefer document explicitly typed as INFORMATION TABLE
-    for doc in idx.get("documents", []):
-        doc_type = doc.get("type", "").upper()
-        desc = doc.get("description", "").lower()
-        name = doc.get("name", "").lower()
-        if (doc_type == "INFORMATION TABLE"
-                or "information table" in desc
-                or ("infotable" in name and name.endswith(".xml"))):
-            return (
-                f"{EDGAR_BASE}/Archives/edgar/data/{int(cik)}/{acc_nodash}/{doc['name']}"
-            )
+    names = [item.get("name", "") for item in idx.get("directory", {}).get("item", [])]
+    xml_names = [n for n in names if n.lower().endswith(".xml")]
 
-    # Fall back: any secondary XML file
-    for doc in idx.get("documents", []):
-        name = doc.get("name", "").lower()
-        doc_type = doc.get("type", "").upper()
-        if name.endswith(".xml") and doc_type not in ("13F-HR", "13F-HR/A"):
-            return (
-                f"{EDGAR_BASE}/Archives/edgar/data/{int(cik)}/{acc_nodash}/{doc['name']}"
-            )
+    # Prefer the document named like an information table
+    for name in xml_names:
+        if "infotable" in name.lower() or "information" in name.lower():
+            return f"{base}/{name}"
+
+    # Fall back: any XML file other than the primary doc
+    for name in xml_names:
+        if name.lower() != "primary_doc.xml":
+            return f"{base}/{name}"
 
     return filing.primary_doc
 
@@ -292,7 +286,7 @@ def fetch_holdings(cik: str, filing: FilingMeta) -> list[Holding]:
             if not xml_rel.startswith("http"):
                 acc_nodash = filing.accession.replace("-", "")
                 xml_rel = (
-                    f"{EDGAR_BASE}/Archives/edgar/data/{int(cik)}/{acc_nodash}/{xml_rel}"
+                    f"{ARCHIVE_BASE}/Archives/edgar/data/{int(cik)}/{acc_nodash}/{xml_rel}"
                 )
             text = _get_text(xml_rel)
 
@@ -315,6 +309,7 @@ class PositionChange:
     cusip: str
     ticker: str
     option_type: str
+    share_type: str         # "SH" or "PRN"; PRN amounts are not share counts
     prior_shares: int
     current_shares: int
     share_change: int
@@ -328,13 +323,37 @@ class PositionChange:
     note: str               # e.g. "Name changed", "CUSIP changed"
 
 
-def _holding_key(h: Holding) -> tuple[str, str]:
-    """(CUSIP, option_type) — stable across name/ticker changes."""
-    return (h.cusip.upper().strip(), h.option_type.lower())
+def _holding_key(h: Holding) -> tuple[str, str, str]:
+    """(CUSIP, option_type, share_type) — stable across name/ticker changes."""
+    return (h.cusip.upper().strip(), h.option_type.lower(), h.share_type)
 
 
-def _name_key(h: Holding) -> str:
-    return re.sub(r"[^a-z0-9]", "", h.issuer_name.lower())
+def _name_key(h: Holding) -> tuple[str, str, str]:
+    """Issuer name plus option/share type, so a put never matches the common stock."""
+    return (re.sub(r"[^a-z0-9]", "", h.issuer_name.lower()), h.option_type.lower(), h.share_type)
+
+
+def aggregate_holdings(holdings: list[Holding]) -> list[Holding]:
+    """
+    Sum rows that share a (CUSIP, option_type, share_type) key.
+
+    A 13F lists one row per sub-manager / discretion type, so the same CUSIP
+    commonly appears on several rows. Comparing quarters on single rows would
+    silently drop all but one of them.
+    """
+    merged: dict[tuple, Holding] = {}
+    for h in holdings:
+        key = _holding_key(h)
+        if key not in merged:
+            merged[key] = replace(h)
+            continue
+        m = merged[key]
+        m.shares += h.shares
+        m.market_value += h.market_value
+        m.voting_authority_sole += h.voting_authority_sole
+        m.voting_authority_shared += h.voting_authority_shared
+        m.voting_authority_none += h.voting_authority_none
+    return list(merged.values())
 
 
 def compare_holdings(
@@ -347,10 +366,12 @@ def compare_holdings(
     Compare two quarters of holdings and return classified position changes,
     sorted by absolute share count change descending.
     """
+    prior = aggregate_holdings(prior)
+    current = aggregate_holdings(current)
     prior_map: dict[tuple, Holding] = {_holding_key(h): h for h in prior}
     current_map: dict[tuple, Holding] = {_holding_key(h): h for h in current}
-    prior_name_map: dict[str, Holding] = {_name_key(h): h for h in prior}
-    current_name_map: dict[str, Holding] = {_name_key(h): h for h in current}
+    prior_name_map: dict[tuple, Holding] = {_name_key(h): h for h in prior}
+    current_name_map: dict[tuple, Holding] = {_name_key(h): h for h in current}
 
     results: list[PositionChange] = []
     matched_prior_keys: set[tuple] = set()
@@ -366,6 +387,7 @@ def compare_holdings(
             cusip=cur.cusip if cur else (pri.cusip if pri else ""),
             ticker=cur.ticker if cur else (pri.ticker if pri else ""),
             option_type=cur.option_type if cur else (pri.option_type if pri else ""),
+            share_type=cur.share_type if cur else (pri.share_type if pri else "SH"),
             prior_shares=pri.shares if pri else 0,
             current_shares=cur.shares if cur else 0,
             share_change=share_delta,
@@ -391,7 +413,7 @@ def compare_holdings(
         else:
             # Name-based fallback for CUSIP reissuance
             nk = _name_key(cur)
-            if nk in prior_name_map:
+            if nk in prior_name_map and _holding_key(prior_name_map[nk]) not in matched_prior_keys:
                 pri = prior_name_map[nk]
                 matched_prior_keys.add(_holding_key(pri))
                 note = "CUSIP changed"
@@ -405,7 +427,10 @@ def compare_holdings(
         if share_delta == 0 and mv_delta == 0 and not note:
             continue  # truly unchanged; exclude from output
 
-        direction = "Increase" if share_delta >= 0 else "Decrease"
+        # No size threshold: any change in share count counts. A position whose
+        # count is unchanged (price move only) is "No Change", not an increase.
+        direction = ("Increase" if share_delta > 0
+                     else "Decrease" if share_delta < 0 else "No Change")
         results.append(_make_change("Changed", direction, cur, pri, note))
 
     # Closed: in prior but not matched by CUSIP or name
@@ -418,3 +443,107 @@ def compare_holdings(
 
     results.sort(key=lambda x: abs(x.share_change), reverse=True)
     return results
+
+
+# ---------------------------------------------------------------------------
+# Largest movers (ranked by share count)
+# ---------------------------------------------------------------------------
+
+TOP_SECTIONS = (
+    ("Equity", "New"), ("Equity", "Closed"), ("Equity", "Increase"), ("Equity", "Decrease"),
+    ("Call", "Increase"), ("Call", "Decrease"),
+    ("Put", "Increase"), ("Put", "Decrease"),
+    ("Bond", "New"),
+)
+
+
+def asset_class(c: PositionChange) -> str:
+    """Equity, Call, Put, or Bond (PRN rows report principal, not shares)."""
+    if c.share_type == "PRN":
+        return "Bond"
+    return c.option_type or "Equity"
+
+
+def top_movers(changes: list[PositionChange], n: int = 10) -> dict[tuple, list[PositionChange]]:
+    """
+    Top-n positions per (asset class, section), ranked by size, never by value.
+
+    Equity, calls, puts and bonds are ranked in separate tables; they were
+    never summed together (the matching key includes put/call and SH/PRN).
+    A change is current minus prior for the same key, since filings only
+    report positive counts. For calls and puts, Increase includes newly
+    opened positions and Decrease includes fully closed ones. Bonds rank by
+    principal amount.
+    """
+    def wanted(c: PositionChange, cls: str, section: str) -> bool:
+        if asset_class(c) != cls:
+            return False
+        if section in ("New", "Closed"):
+            return c.category == section
+        moved = c.share_change > 0 if section == "Increase" else c.share_change < 0
+        return moved and (cls != "Equity" or c.category == "Changed")
+
+    return {
+        (cls, section): sorted(
+            (c for c in changes if wanted(c, cls, section)),
+            key=lambda c: abs(c.share_change), reverse=True,
+        )[:n]
+        for cls, section in TOP_SECTIONS
+    }
+
+
+# ---------------------------------------------------------------------------
+# CUSIP -> ticker (13F filings carry no tickers)
+# ---------------------------------------------------------------------------
+
+OPENFIGI_URL = "https://api.openfigi.com/v3/mapping"
+
+
+def _post_json(url: str, payload: list, headers: dict) -> list:
+    req = Request(url, data=json.dumps(payload).encode(), method="POST",
+                  headers={"Content-Type": "application/json", **headers})
+    with urlopen(req, timeout=30) as resp:
+        return json.loads(resp.read())
+
+
+def _pick_ticker(matches: list[dict]) -> str:
+    """Prefer the US composite listing, else the first match that has a ticker."""
+    with_ticker = [m for m in matches if m.get("ticker")]
+    for m in with_ticker:
+        if m.get("exchCode") == "US":
+            return m["ticker"]
+    return with_ticker[0]["ticker"] if with_ticker else ""
+
+
+def lookup_tickers(cusips: list[str], api_key: Optional[str] = None,
+                   post=_post_json, sleep=time.sleep) -> dict[str, str]:
+    """
+    Map CUSIPs to tickers with the OpenFIGI API (free; set OPENFIGI_API_KEY for
+    higher limits). Returns only the CUSIPs it resolved; never raises, so a
+    blocked or rate-limited lookup just leaves tickers blank.
+    """
+    unique = list(dict.fromkeys(c.strip().upper() for c in cusips if c.strip()))
+    batch = 100 if api_key else 10          # per-request job limit
+    pause = 0.3 if api_key else 2.6         # 25 req/min without a key
+    headers = {"X-OPENFIGI-APIKEY": api_key} if api_key else {}
+    found: dict[str, str] = {}
+    for i in range(0, len(unique), batch):
+        chunk = unique[i:i + batch]
+        jobs = [{"idType": "ID_CUSIP", "idValue": c} for c in chunk]
+        try:
+            try:
+                results = post(OPENFIGI_URL, jobs, headers)
+            except HTTPError as e:
+                if e.code != 429:
+                    raise
+                sleep(30)
+                results = post(OPENFIGI_URL, jobs, headers)
+        except (HTTPError, URLError, OSError, ValueError) as e:
+            print(f"  WARNING: ticker lookup failed ({e}); tickers left blank.")
+            return found
+        for cusip, res in zip(chunk, results):
+            ticker = _pick_ticker(res.get("data", [])) if isinstance(res, dict) else ""
+            if ticker:
+                found[cusip] = ticker
+        sleep(pause)
+    return found

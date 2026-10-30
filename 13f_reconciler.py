@@ -18,6 +18,7 @@ This script sleeps 0.6s between requests to stay well under the limit.
 
 import argparse
 import csv
+import os
 import sys
 from pathlib import Path
 
@@ -41,9 +42,9 @@ DETAIL_HEADERS = [
     "Prior Shares",
     "Current Shares",
     "Share Change",
-    "Prior Market Value ($000s)",
-    "Current Market Value ($000s)",
-    "Market Value Change ($000s)",
+    "Prior Market Value ($)",
+    "Current Market Value ($)",
+    "Market Value Change ($)",
     "Prior Filing Date",
     "Current Filing Date",
     "Notes",
@@ -52,7 +53,7 @@ DETAIL_HEADERS = [
 SUMMARY_HEADERS = [
     "Category",
     "Position Count",
-    "Aggregate Market Value ($000s)",
+    "Aggregate Market Value ($)",
 ]
 
 
@@ -89,6 +90,7 @@ def _build_summary(changes: list[rc.PositionChange]) -> list[list]:
         "Closed Positions": {"count": 0, "mv": 0},
         "Changed - Increase": {"count": 0, "mv": 0},
         "Changed - Decrease": {"count": 0, "mv": 0},
+        "Changed - No Change": {"count": 0, "mv": 0},
     }
     for c in changes:
         if c.category == "New":
@@ -106,9 +108,11 @@ def _build_summary(changes: list[rc.PositionChange]) -> list[list]:
 
     total_changed = (
         buckets["Changed - Increase"]["count"] + buckets["Changed - Decrease"]["count"]
+        + buckets["Changed - No Change"]["count"]
     )
     total_changed_mv = (
         buckets["Changed - Increase"]["mv"] + buckets["Changed - Decrease"]["mv"]
+        + buckets["Changed - No Change"]["mv"]
     )
     grand_total = sum(v["count"] for v in buckets.values())
 
@@ -117,6 +121,35 @@ def _build_summary(changes: list[rc.PositionChange]) -> list[list]:
         ["Total Changed (all directions)", _fmt(total_changed), _fmt(total_changed_mv)],
         ["GRAND TOTAL", _fmt(grand_total), ""],
     ]
+    return rows
+
+
+TOP_N = 10
+TOP_HEADERS = [
+    "Section", "Rank", "Ticker", "Issuer", "CUSIP", "Category",
+    "Prior Shares / Principal", "Current Shares / Principal", "Change",
+]
+CLASS_LABELS = {"Equity": "Equity", "Call": "Calls", "Put": "Puts", "Bond": "Bonds"}
+SECTION_LABELS = {
+    "New": "Largest New", "Closed": "Largest Closed",
+    "Increase": "Largest Increases", "Decrease": "Largest Decreases",
+}
+
+
+def _top_rows(top: dict[tuple, list[rc.PositionChange]]) -> list[list]:
+    rows: list[list] = []
+    for cls, section in rc.TOP_SECTIONS:
+        unit = "principal" if cls == "Bond" else "underlying shares" if cls in ("Call", "Put") else "shares"
+        label = f"{CLASS_LABELS[cls]} - {SECTION_LABELS[section]} (by {unit})"
+        rows.append([])
+        if not top[(cls, section)]:
+            rows.append([label, "", "", "None this quarter"])
+        for rank, c in enumerate(top[(cls, section)], 1):
+            rows.append([
+                label, rank, c.ticker,
+                c.issuer_name_current or c.issuer_name_prior, c.cusip, c.category,
+                _fmt(c.prior_shares), _fmt(c.current_shares), _fmt(c.share_change),
+            ])
     return rows
 
 
@@ -197,6 +230,15 @@ def main() -> None:
     changed_c = sum(1 for c in changes if c.category == "Changed")
     print(f"  New: {new_c}   Closed: {closed_c}   Changed: {changed_c}")
 
+    # --- Largest movers, then tickers for those rows only (last step) ---
+    top = rc.top_movers(changes, TOP_N)
+    finalists = [c for rows in top.values() for c in rows]
+    print(f"Looking up tickers for {len({c.cusip for c in finalists})} CUSIPs in the top tables (OpenFIGI)...")
+    tickers = rc.lookup_tickers([c.cusip for c in finalists], os.environ.get("OPENFIGI_API_KEY"))
+    for c in finalists:
+        c.ticker = tickers.get(c.cusip.strip().upper(), "")
+    print(f"  Resolved {len(tickers)} tickers")
+
     # --- Write CSVs ---
     safe_period = current_filing.period.replace("-", "")
     detail_path = out_dir / f"13f_changes_{cik}_{safe_period}.csv"
@@ -204,7 +246,13 @@ def main() -> None:
 
     print("Writing output files...")
     write_csv(detail_path, DETAIL_HEADERS, [_detail_row(c) for c in changes])
-    write_csv(summary_path, SUMMARY_HEADERS, _build_summary(changes))
+    summary_rows = _build_summary(changes)
+    write_csv(summary_path, SUMMARY_HEADERS, summary_rows)
+    with open(summary_path, "a", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow([])
+        w.writerow(TOP_HEADERS)
+        w.writerows(_top_rows(top))
 
     print("\nComplete.")
     print(f"  Detail CSV : {detail_path}")

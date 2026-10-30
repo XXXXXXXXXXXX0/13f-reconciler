@@ -20,14 +20,34 @@ fund manager, compares the most recent two quarters, and outputs the differences
 | Issuer Name (Current Quarter) | Name as reported in the current filing |
 | Issuer Name (Prior Quarter) | Name as reported in the prior filing |
 | CUSIP | 9-character CUSIP (stable identifier; used for cross-quarter matching) |
-| Ticker | Populated if available from the filing |
+| Ticker | 13F filings carry no tickers; resolved from the CUSIP via OpenFIGI (see `--tickers`) |
 | Prior / Current Period | Reporting period end dates |
 | Prior / Current Shares | Share counts as reported |
 | Share Change | Current minus prior (negative = decrease) |
-| Prior / Current Market Value ($000s) | Market value in thousands as reported |
-| Market Value Change ($000s) | Current minus prior |
+| Prior / Current Market Value ($) | Market value in whole US dollars as reported (SEC switched from thousands in 2023) |
+| Market Value Change ($) | Current minus prior |
 | Prior / Current Filing Date | Date each 13F was filed with the SEC |
 | Notes | `Name changed`, `CUSIP changed`, or blank |
+
+### Largest movers (bottom of the summary CSV)
+
+Top 10 per table, ranked by size, never by market value. Each asset class has its own
+tables and is never summed with another: rows are matched on CUSIP + put/call + SH/PRN.
+
+| Asset class | Tables | Ranked by |
+|---|---|---|
+| Equity | New, Closed, Increases, Decreases | shares |
+| Calls | Increases (incl. newly opened), Decreases (incl. fully closed) | underlying shares |
+| Puts | Increases (incl. newly opened), Decreases (incl. fully closed) | underlying shares |
+| Bonds | New | principal amount |
+
+Filings only report positive counts, so a change is current minus prior for the same CUSIP.
+There is no minimum size: any change counts. Rows for the same CUSIP (one per sub-manager)
+are summed first. A position whose count did not change is `No Change`, not an increase.
+
+Tickers are looked up last, only for the rows in these tables (at most 90 CUSIPs), via the
+free OpenFIGI API (`api.openfigi.com`; set `OPENFIGI_API_KEY` for higher limits). The detail
+CSV is not looked up. If the lookup fails, tickers stay blank.
 
 ### Summary CSV rows
 
@@ -35,6 +55,7 @@ fund manager, compares the most recent two quarters, and outputs the differences
 - Closed Positions
 - Changed – Increase
 - Changed – Decrease
+- Changed – No Change (share count unchanged; value moved)
 - Total Changed (all directions)
 - GRAND TOTAL
 
