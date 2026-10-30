@@ -427,7 +427,10 @@ def compare_holdings(
         if share_delta == 0 and mv_delta == 0 and not note:
             continue  # truly unchanged; exclude from output
 
-        direction = "Increase" if share_delta >= 0 else "Decrease"
+        # No size threshold: any change in share count counts. A position whose
+        # count is unchanged (price move only) is "No Change", not an increase.
+        direction = ("Increase" if share_delta > 0
+                     else "Decrease" if share_delta < 0 else "No Change")
         results.append(_make_change("Changed", direction, cur, pri, note))
 
     # Closed: in prior but not matched by CUSIP or name
@@ -446,34 +449,47 @@ def compare_holdings(
 # Largest movers (ranked by share count)
 # ---------------------------------------------------------------------------
 
-TOP_SECTIONS = ("New", "Closed", "Increase", "Decrease")
+TOP_SECTIONS = (
+    ("Equity", "New"), ("Equity", "Closed"), ("Equity", "Increase"), ("Equity", "Decrease"),
+    ("Call", "Increase"), ("Call", "Decrease"),
+    ("Put", "Increase"), ("Put", "Decrease"),
+    ("Bond", "New"),
+)
 
 
-def top_movers(changes: list[PositionChange], n: int = 10) -> dict[str, list[PositionChange]]:
+def asset_class(c: PositionChange) -> str:
+    """Equity, Call, Put, or Bond (PRN rows report principal, not shares)."""
+    if c.share_type == "PRN":
+        return "Bond"
+    return c.option_type or "Equity"
+
+
+def top_movers(changes: list[PositionChange], n: int = 10) -> dict[tuple, list[PositionChange]]:
     """
-    Top-n positions per section, ranked by share count (not market value).
+    Top-n positions per (asset class, section), ranked by size, never by value.
 
-    New / Closed rank by the full position size; Increase / Decrease rank by
-    the size of the change in shares, where a decrease is current minus prior
-    shares for the same CUSIP (13F filings never report a negative count).
-    PRN rows are principal amounts, not shares, so they are excluded.
+    Equity, calls, puts and bonds are ranked in separate tables; they were
+    never summed together (the matching key includes put/call and SH/PRN).
+    A change is current minus prior for the same key, since filings only
+    report positive counts. For calls and puts, Increase includes newly
+    opened positions and Decrease includes fully closed ones. Bonds rank by
+    principal amount.
     """
-    shares_only = [c for c in changes if c.share_type == "SH"]
+    def wanted(c: PositionChange, cls: str, section: str) -> bool:
+        if asset_class(c) != cls:
+            return False
+        if section in ("New", "Closed"):
+            return c.category == section
+        moved = c.share_change > 0 if section == "Increase" else c.share_change < 0
+        return moved and (cls != "Equity" or c.category == "Changed")
 
-    def size(c: PositionChange) -> int:
-        if c.category == "New":
-            return c.current_shares
-        if c.category == "Closed":
-            return c.prior_shares
-        return abs(c.share_change)
-
-    picks = {
-        "New": [c for c in shares_only if c.category == "New"],
-        "Closed": [c for c in shares_only if c.category == "Closed"],
-        "Increase": [c for c in shares_only if c.category == "Changed" and c.share_change > 0],
-        "Decrease": [c for c in shares_only if c.category == "Changed" and c.share_change < 0],
+    return {
+        (cls, section): sorted(
+            (c for c in changes if wanted(c, cls, section)),
+            key=lambda c: abs(c.share_change), reverse=True,
+        )[:n]
+        for cls, section in TOP_SECTIONS
     }
-    return {k: sorted(v, key=size, reverse=True)[:n] for k, v in picks.items()}
 
 
 # ---------------------------------------------------------------------------

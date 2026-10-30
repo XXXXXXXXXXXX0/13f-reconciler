@@ -31,16 +31,23 @@ fund manager, compares the most recent two quarters, and outputs the differences
 
 ### Largest movers (bottom of the summary CSV)
 
-Top 10 New, Closed, Increase and Decrease positions, **ranked by share count** (not market
-value), with ticker. Filings only ever report positive counts, so an increase or decrease is
-computed as current minus prior shares for the same CUSIP + option type. Rows for the same
-CUSIP (one per sub-manager) are summed first. Bond rows (principal amount, not shares) are
-left out of these tables. For options, shares are the underlying share count.
+Top 10 per table, ranked by size, never by market value. Each asset class has its own
+tables and is never summed with another: rows are matched on CUSIP + put/call + SH/PRN.
 
-Tickers use the free OpenFIGI API (`api.openfigi.com`). `--tickers top` (default) looks up only
-these tables, `--tickers all` fills the detail CSV too (about 25 requests/minute without a key;
-set `OPENFIGI_API_KEY` for more), `--tickers none` skips it. If the lookup fails, tickers stay
-blank.
+| Asset class | Tables | Ranked by |
+|---|---|---|
+| Equity | New, Closed, Increases, Decreases | shares |
+| Calls | Increases (incl. newly opened), Decreases (incl. fully closed) | underlying shares |
+| Puts | Increases (incl. newly opened), Decreases (incl. fully closed) | underlying shares |
+| Bonds | New | principal amount |
+
+Filings only report positive counts, so a change is current minus prior for the same CUSIP.
+There is no minimum size: any change counts. Rows for the same CUSIP (one per sub-manager)
+are summed first. A position whose count did not change is `No Change`, not an increase.
+
+Tickers are looked up last, only for the rows in these tables (at most 90 CUSIPs), via the
+free OpenFIGI API (`api.openfigi.com`; set `OPENFIGI_API_KEY` for higher limits). The detail
+CSV is not looked up. If the lookup fails, tickers stay blank.
 
 ### Summary CSV rows
 
@@ -48,6 +55,7 @@ blank.
 - Closed Positions
 - Changed – Increase
 - Changed – Decrease
+- Changed – No Change (share count unchanged; value moved)
 - Total Changed (all directions)
 - GRAND TOTAL
 

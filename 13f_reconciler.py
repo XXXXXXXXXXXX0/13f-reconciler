@@ -90,6 +90,7 @@ def _build_summary(changes: list[rc.PositionChange]) -> list[list]:
         "Closed Positions": {"count": 0, "mv": 0},
         "Changed - Increase": {"count": 0, "mv": 0},
         "Changed - Decrease": {"count": 0, "mv": 0},
+        "Changed - No Change": {"count": 0, "mv": 0},
     }
     for c in changes:
         if c.category == "New":
@@ -107,9 +108,11 @@ def _build_summary(changes: list[rc.PositionChange]) -> list[list]:
 
     total_changed = (
         buckets["Changed - Increase"]["count"] + buckets["Changed - Decrease"]["count"]
+        + buckets["Changed - No Change"]["count"]
     )
     total_changed_mv = (
         buckets["Changed - Increase"]["mv"] + buckets["Changed - Decrease"]["mv"]
+        + buckets["Changed - No Change"]["mv"]
     )
     grand_total = sum(v["count"] for v in buckets.values())
 
@@ -123,26 +126,28 @@ def _build_summary(changes: list[rc.PositionChange]) -> list[list]:
 
 TOP_N = 10
 TOP_HEADERS = [
-    "Section", "Rank", "Ticker", "Issuer", "CUSIP", "Option Type",
-    "Prior Shares", "Current Shares", "Share Change",
+    "Section", "Rank", "Ticker", "Issuer", "CUSIP", "Category",
+    "Prior Shares / Principal", "Current Shares / Principal", "Change",
 ]
-TOP_LABELS = {
-    "New": "Largest New Positions (by shares)",
-    "Closed": "Largest Closed Positions (by shares)",
-    "Increase": "Largest Increases (by share change)",
-    "Decrease": "Largest Decreases (by share change)",
+CLASS_LABELS = {"Equity": "Equity", "Call": "Calls", "Put": "Puts", "Bond": "Bonds"}
+SECTION_LABELS = {
+    "New": "Largest New", "Closed": "Largest Closed",
+    "Increase": "Largest Increases", "Decrease": "Largest Decreases",
 }
 
 
-def _top_rows(top: dict[str, list[rc.PositionChange]]) -> list[list]:
+def _top_rows(top: dict[tuple, list[rc.PositionChange]]) -> list[list]:
     rows: list[list] = []
-    for section in rc.TOP_SECTIONS:
+    for cls, section in rc.TOP_SECTIONS:
+        unit = "principal" if cls == "Bond" else "underlying shares" if cls in ("Call", "Put") else "shares"
+        label = f"{CLASS_LABELS[cls]} - {SECTION_LABELS[section]} (by {unit})"
         rows.append([])
-        for rank, c in enumerate(top[section], 1):
+        if not top[(cls, section)]:
+            rows.append([label, "", "", "None this quarter"])
+        for rank, c in enumerate(top[(cls, section)], 1):
             rows.append([
-                TOP_LABELS[section], rank, c.ticker,
-                c.issuer_name_current or c.issuer_name_prior, c.cusip,
-                c.option_type or "Equity",
+                label, rank, c.ticker,
+                c.issuer_name_current or c.issuer_name_prior, c.cusip, c.category,
                 _fmt(c.prior_shares), _fmt(c.current_shares), _fmt(c.share_change),
             ])
     return rows
@@ -179,14 +184,6 @@ def main() -> None:
             "Your email address to include in the SEC User-Agent header. "
             "SEC EDGAR policy requires a valid contact email. "
             "Defaults to the value compiled into reconciler_core.py."
-        ),
-    )
-    parser.add_argument(
-        "--tickers", choices=["top", "all", "none"], default="top",
-        help=(
-            "Look up tickers from CUSIPs via OpenFIGI (13F filings carry none). "
-            "'top' (default) resolves only the largest-movers tables, 'all' also fills "
-            "the detail CSV (slow without OPENFIGI_API_KEY), 'none' skips the lookup."
         ),
     )
     args = parser.parse_args()
@@ -233,15 +230,14 @@ def main() -> None:
     changed_c = sum(1 for c in changes if c.category == "Changed")
     print(f"  New: {new_c}   Closed: {closed_c}   Changed: {changed_c}")
 
-    # --- Largest movers (ranked by share count) and tickers ---
+    # --- Largest movers, then tickers for those rows only (last step) ---
     top = rc.top_movers(changes, TOP_N)
-    if args.tickers != "none":
-        wanted = changes if args.tickers == "all" else [c for rows in top.values() for c in rows]
-        print(f"Looking up tickers for {len({c.cusip for c in wanted})} CUSIPs (OpenFIGI)...")
-        tickers = rc.lookup_tickers([c.cusip for c in wanted], os.environ.get("OPENFIGI_API_KEY"))
-        for c in changes:
-            c.ticker = c.ticker or tickers.get(c.cusip.strip().upper(), "")
-        print(f"  Resolved {len(tickers)} tickers")
+    finalists = [c for rows in top.values() for c in rows]
+    print(f"Looking up tickers for {len({c.cusip for c in finalists})} CUSIPs in the top tables (OpenFIGI)...")
+    tickers = rc.lookup_tickers([c.cusip for c in finalists], os.environ.get("OPENFIGI_API_KEY"))
+    for c in finalists:
+        c.ticker = tickers.get(c.cusip.strip().upper(), "")
+    print(f"  Resolved {len(tickers)} tickers")
 
     # --- Write CSVs ---
     safe_period = current_filing.period.replace("-", "")

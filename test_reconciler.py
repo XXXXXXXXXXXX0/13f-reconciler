@@ -203,11 +203,12 @@ def test_top_movers_rank_by_shares_not_value():
                H("BOND", "G", 99_999_999, 5, st="PRN")]
     changes = compare_holdings(prior, current, make_filing("a", "a"), make_filing("b", "b"))
     top = top_movers(changes, 5)
-    assert [c.issuer_name_current for c in top["New"]] == ["NEW BIG", "NEW SMALL"]
-    assert [c.issuer_name_prior for c in top["Closed"]] == ["GONE BIG", "GONE SMALL"]
-    assert [c.issuer_name_current for c in top["Increase"]] == ["MANY SHARES", "BIG VALUE"]
-    assert top["Decrease"] == []
-    assert all(c.share_type == "SH" for rows in top.values() for c in rows)  # PRN excluded
+    assert [c.issuer_name_current for c in top[("Equity", "New")]] == ["NEW BIG", "NEW SMALL"]
+    assert [c.issuer_name_prior for c in top[("Equity", "Closed")]] == ["GONE BIG", "GONE SMALL"]
+    assert [c.issuer_name_current for c in top[("Equity", "Increase")]] == ["MANY SHARES", "BIG VALUE"]
+    assert top[("Equity", "Decrease")] == []
+    assert [c.issuer_name_current for c in top[("Bond", "New")]] == ["BOND"]
+    assert all(c.share_type == "SH" for k, rows in top.items() if k[0] != "Bond" for c in rows)
     print("  top_movers by share count: PASS")
 
 
@@ -216,8 +217,29 @@ def test_decrease_is_computed_from_prior_filing():
     changes = compare_holdings([H("CUT", "Z", 1_000)], [H("CUT", "Z", 400)],
                                make_filing("a", "a"), make_filing("b", "b"))
     assert changes[0].share_change == -600 and changes[0].direction == "Decrease"
-    assert top_movers(changes)["Decrease"][0].share_change == -600
+    assert top_movers(changes)[("Equity", "Decrease")][0].share_change == -600
     print("  decrease computed vs prior: PASS")
+
+
+def test_options_ranked_separately_from_equity():
+    """Calls/puts are never summed with the stock and get their own tables."""
+    prior = [H("ACME", "A", 1_000), H("ACME", "A", 500, opt="Call"), H("ZED", "Z", 900, opt="Put")]
+    current = [H("ACME", "A", 1_000), H("ACME", "A", 50_000, opt="Call"), H("ACME", "A", 7_000, opt="Put")]
+    changes = compare_holdings(prior, current, make_filing("a", "a"), make_filing("b", "b"))
+    top = top_movers(changes)
+    assert top[("Equity", "Increase")] == []                      # stock count unchanged
+    assert [c.share_change for c in top[("Call", "Increase")]] == [49_500]
+    assert [c.category for c in top[("Put", "Increase")]] == ["New"]   # opened from zero
+    assert [c.category for c in top[("Put", "Decrease")]] == ["Closed"]
+    print("  options ranked separately: PASS")
+
+
+def test_unchanged_share_count_is_not_an_increase():
+    changes = compare_holdings([H("FLAT", "F", 100, 10)], [H("FLAT", "F", 100, 99)],
+                               make_filing("a", "a"), make_filing("b", "b"))
+    assert changes[0].direction == "No Change"
+    assert all(not rows for rows in top_movers(changes).values())
+    print("  unchanged count not an increase: PASS")
 
 
 def test_lookup_tickers_with_mocked_openfigi():
@@ -253,5 +275,7 @@ if __name__ == "__main__":
     test_name_fallback_does_not_match_across_option_types()
     test_top_movers_rank_by_shares_not_value()
     test_decrease_is_computed_from_prior_filing()
+    test_options_ranked_separately_from_equity()
+    test_unchanged_share_count_is_not_an_increase()
     test_lookup_tickers_with_mocked_openfigi()
     print("\nAll tests passed.")
