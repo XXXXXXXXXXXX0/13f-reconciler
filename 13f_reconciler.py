@@ -18,10 +18,12 @@ This script sleeps 0.6s between requests to stay well under the limit.
 
 import argparse
 import csv
+import os
 import sys
 from pathlib import Path
 
 import reconciler_core as rc
+import run_store
 
 
 # ---------------------------------------------------------------------------
@@ -41,9 +43,10 @@ DETAIL_HEADERS = [
     "Prior Shares",
     "Current Shares",
     "Share Change",
-    "Prior Market Value ($000s)",
-    "Current Market Value ($000s)",
-    "Market Value Change ($000s)",
+    "% Change",
+    "Prior Market Value ($)",
+    "Current Market Value ($)",
+    "Market Value Change ($)",
     "Prior Filing Date",
     "Current Filing Date",
     "Notes",
@@ -52,12 +55,18 @@ DETAIL_HEADERS = [
 SUMMARY_HEADERS = [
     "Category",
     "Position Count",
-    "Aggregate Market Value ($000s)",
+    "Aggregate Market Value ($)",
 ]
 
 
 def _fmt(n: int) -> str:
     return f"{n:,}"
+
+
+def _pct(c: rc.PositionChange) -> str:
+    """% change vs prior filing; blank for New / Closed."""
+    pct = rc.pct_change(c)
+    return f"{pct:+,.1f}%" if pct is not None and c.category == "Changed" else ""
 
 
 def _detail_row(c: rc.PositionChange) -> list:
@@ -74,6 +83,7 @@ def _detail_row(c: rc.PositionChange) -> list:
         _fmt(c.prior_shares),
         _fmt(c.current_shares),
         _fmt(c.share_change),
+        _pct(c),
         _fmt(c.prior_market_value),
         _fmt(c.current_market_value),
         _fmt(c.market_value_change),
@@ -89,6 +99,7 @@ def _build_summary(changes: list[rc.PositionChange]) -> list[list]:
         "Closed Positions": {"count": 0, "mv": 0},
         "Changed - Increase": {"count": 0, "mv": 0},
         "Changed - Decrease": {"count": 0, "mv": 0},
+        "Changed - No Change": {"count": 0, "mv": 0},
     }
     for c in changes:
         if c.category == "New":
@@ -106,9 +117,11 @@ def _build_summary(changes: list[rc.PositionChange]) -> list[list]:
 
     total_changed = (
         buckets["Changed - Increase"]["count"] + buckets["Changed - Decrease"]["count"]
+        + buckets["Changed - No Change"]["count"]
     )
     total_changed_mv = (
         buckets["Changed - Increase"]["mv"] + buckets["Changed - Decrease"]["mv"]
+        + buckets["Changed - No Change"]["mv"]
     )
     grand_total = sum(v["count"] for v in buckets.values())
 
@@ -120,11 +133,49 @@ def _build_summary(changes: list[rc.PositionChange]) -> list[list]:
     return rows
 
 
-def write_csv(path: Path, headers: list[str], rows: list[list]) -> None:
-    with open(path, "w", newline="", encoding="utf-8") as f:
+TOP_N = 10
+TOP_HEADERS = [
+    "Section", "Rank", "Ticker", "Issuer", "CUSIP", "Category",
+    "Prior Shares / Principal", "Current Shares / Principal", "Change", "% Change",
+]
+CLASS_LABELS = {"Equity": "Equity", "Call": "Calls", "Put": "Puts", "Bond": "Bonds"}
+SECTION_LABELS = {
+    "New": "Largest New", "Closed": "Largest Closed",
+    "Increase": "Largest Increases", "Decrease": "Largest Decreases",
+}
+
+
+def _top_rows(top: dict[tuple, list[rc.PositionChange]]) -> list[list]:
+    rows: list[list] = []
+    for cls, section in rc.TOP_SECTIONS:
+        unit = ("principal" if cls == "Bond"
+                else "underlying shares" if cls in ("Call", "Put")
+                else "% change" if section in ("Increase", "Decrease") else "shares")
+        label = f"{CLASS_LABELS[cls]} - {SECTION_LABELS[section]} (by {unit})"
+        rows.append([])
+        if not top[(cls, section)]:
+            rows.append([label, "", "", "None this quarter"])
+        for rank, c in enumerate(top[(cls, section)], 1):
+            rows.append([
+                label, rank, c.ticker,
+                c.issuer_name_current or c.issuer_name_prior, c.cusip, c.category,
+                _fmt(c.prior_shares), _fmt(c.current_shares), _fmt(c.share_change),
+                _pct(c),
+            ])
+    return rows
+
+
+def write_csv(path: Path, headers: list[str], rows: list[list],
+              extra: list[list] = ()) -> None:
+    """Write via a temp file so a failed run never leaves a half-written CSV."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".csv.tmp")
+    with open(tmp, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(headers)
         w.writerows(rows)
+        w.writerows(extra)
+    os.replace(tmp, path)
     print(f"  Wrote {len(rows)} data rows → {path}")
 
 
@@ -142,8 +193,8 @@ def main() -> None:
     id_grp.add_argument("--cik", help="SEC CIK number (e.g. 0001067983)")
     id_grp.add_argument("--name", help='Fund manager name to search for (e.g. "Berkshire Hathaway")')
     parser.add_argument(
-        "--output", default=".",
-        help="Output directory for CSV files (default: current directory)",
+        "--no-commit", action="store_true",
+        help="Write results and the ticker store but do not commit or push.",
     )
     parser.add_argument(
         "--email",
@@ -158,9 +209,6 @@ def main() -> None:
     if args.email:
         rc.USER_AGENT = f"13F-Reconciler {args.email}"
         rc.HEADERS["User-Agent"] = rc.USER_AGENT
-
-    out_dir = Path(args.output)
-    out_dir.mkdir(parents=True, exist_ok=True)
 
     # --- Resolve CIK ---
     print("Resolving CIK...")
@@ -191,24 +239,61 @@ def main() -> None:
     # --- Compare ---
     print("Comparing holdings...")
     changes = rc.compare_holdings(prior_holdings, current_holdings, prior_filing, current_filing)
+    before = len(changes)
+    changes = rc.apply_equity_thresholds(changes)
+    print(f"  Equity thresholds (+{rc.EQUITY_MIN_INCREASE_PCT:g}% / -{rc.EQUITY_MIN_DECREASE_PCT:g}%) "
+          f"dropped {before - len(changes)} smaller equity changes")
 
     new_c = sum(1 for c in changes if c.category == "New")
     closed_c = sum(1 for c in changes if c.category == "Closed")
     changed_c = sum(1 for c in changes if c.category == "Changed")
     print(f"  New: {new_c}   Closed: {closed_c}   Changed: {changed_c}")
 
-    # --- Write CSVs ---
-    safe_period = current_filing.period.replace("-", "")
-    detail_path = out_dir / f"13f_changes_{cik}_{safe_period}.csv"
-    summary_path = out_dir / f"13f_summary_{cik}_{safe_period}.csv"
+    # --- Largest movers, then tickers for those rows only (last step) ---
+    top = rc.top_movers(changes, TOP_N)
+    finalists = [c for rows in top.values() for c in rows]
+    period = current_filing.period
+    store_path = run_store.ticker_store_path(cik, period)
+    api_key = os.environ.get("OPENFIGI_API_KEY")
+    res = run_store.resolve_tickers([c.cusip for c in finalists], cik, period,
+                                    lookup=lambda cusips: rc.lookup_tickers(cusips, api_key))
+    print(f"Tickers: {len({c.cusip for c in finalists})} CUSIPs in the final tables, "
+          f"{len(res.looked_up)} looked up on OpenFIGI, the rest reused from {store_path.name}")
+    if res.failed:
+        print("ERROR: ticker lookup failed partway. Nothing was written or committed; "
+              "re-run to retry (stored tickers are reused).", file=sys.stderr)
+        sys.exit(1)
+    for c in finalists:
+        c.ticker = res.tickers.get(c.cusip.strip().upper(), "")
 
+    # --- Write results + ticker store into the repo (only after every step succeeded) ---
+    out_dir = run_store.results_dir(cik, period)
+    detail_path = out_dir / f"13f_changes_{cik}_{period}.csv"
+    summary_path = out_dir / f"13f_summary_{cik}_{period}.csv"
     print("Writing output files...")
     write_csv(detail_path, DETAIL_HEADERS, [_detail_row(c) for c in changes])
-    write_csv(summary_path, SUMMARY_HEADERS, _build_summary(changes))
+    write_csv(summary_path, SUMMARY_HEADERS, _build_summary(changes),
+              extra=[[], TOP_HEADERS, *_top_rows(top)])
+    run_store.write_json(store_path, res.store)
+
+    # --- Commit + push exactly these files (README updated only for committed runs) ---
+    if args.no_commit:
+        print("Skipping commit and README update (--no-commit).")
+    else:
+        readme = run_store.REPO_ROOT / "README.md"
+        run_store.update_readme(readme, run_store.render_latest_results(
+            cik, period, prior_filing.period, top, summary_path))
+        status = run_store.commit_run(
+            [detail_path, summary_path, store_path, readme],
+            f"13F run: CIK {cik}, period {period}")
+        print({"pushed": "Committed and pushed.",
+               "unchanged": "No changes since the last committed run; nothing to commit."}
+              .get(status, status))
 
     print("\nComplete.")
     print(f"  Detail CSV : {detail_path}")
     print(f"  Summary CSV: {summary_path}")
+    print(f"  Tickers    : {store_path}")
 
 
 if __name__ == "__main__":
