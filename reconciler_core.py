@@ -546,6 +546,16 @@ def _pick_ticker(matches: list[dict]) -> str:
     return with_ticker[0]["ticker"] if with_ticker else ""
 
 
+def split_figi_ticker(raw: str) -> tuple[str, str]:
+    """
+    OpenFIGI gives bonds (and some notes) an identifier like "SMCI 0 06/15/30"
+    (issuer, coupon, maturity). Return (issuer ticker, full identifier); for a
+    plain ticker the identifier part is empty.
+    """
+    raw = raw.strip()
+    return (raw.split()[0], raw) if " " in raw else (raw, "")
+
+
 def _id_type(cusip: str) -> str:
     """Identifiers starting with a letter (e.g. G..., Q...) are non-US CINS codes."""
     return "ID_CINS" if cusip[:1].isalpha() else "ID_CUSIP"

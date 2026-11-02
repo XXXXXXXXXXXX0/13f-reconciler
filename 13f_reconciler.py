@@ -33,7 +33,7 @@ import run_store
 DETAIL_HEADERS = [
     "Category",
     "Direction",
-    "Option Type",
+    "Security Type",
     "Issuer Name (Current Quarter)",
     "Issuer Name (Prior Quarter)",
     "CUSIP",
@@ -73,7 +73,7 @@ def _detail_row(c: rc.PositionChange) -> list:
     return [
         c.category,
         c.direction,
-        c.option_type if c.option_type else "Equity",
+        rc.asset_class(c),          # Equity, Call, Put or Bond (PRN rows)
         c.issuer_name_current,
         c.issuer_name_prior,
         c.cusip,
@@ -263,8 +263,7 @@ def main() -> None:
         print("ERROR: ticker lookup failed partway. Nothing was written or committed; "
               "re-run to retry (stored tickers are reused).", file=sys.stderr)
         sys.exit(1)
-    for c in finalists:
-        c.ticker = res.tickers.get(c.cusip.strip().upper(), "")
+    run_store.apply_tickers(changes, res.tickers)
 
     # --- Write results + ticker store into the repo (only after every step succeeded) ---
     out_dir = run_store.results_dir(cik, period)

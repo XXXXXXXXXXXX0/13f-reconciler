@@ -70,6 +70,22 @@ def resolve_tickers(cusips: list[str], cik: str, period: str, root: Path = REPO_
                             store=store, looked_up=missing, failed=failed)
 
 
+def apply_tickers(changes: list, tickers: dict) -> None:
+    """
+    Set the ticker on every row whose CUSIP was resolved, not only the rows in
+    the top tables (an option's CUSIP is its underlying's, so calls and puts
+    share it). No lookups happen here. Debt-style identifiers keep the issuer
+    ticker in Ticker and the full identifier in Notes.
+    """
+    for c in changes:
+        raw = tickers.get(c.cusip.strip().upper(), "")
+        if not raw:
+            continue
+        c.ticker, detail = rc.split_figi_ticker(raw)
+        if detail:
+            c.note = "; ".join(n for n in (c.note, f"OpenFIGI security: {detail}") if n)
+
+
 def write_json(path: Path, data: dict) -> None:
     """Write via a temp file so a crash never leaves a half-written store."""
     path.parent.mkdir(parents=True, exist_ok=True)
