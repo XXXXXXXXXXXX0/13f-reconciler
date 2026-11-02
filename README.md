@@ -56,11 +56,11 @@ CIK **0001009207**, period **2026-06-30** compared with **2026-03-31**. Full tab
 |---|---|
 | Category | `New`, `Closed`, or `Changed` |
 | Direction | `Increase` or `Decrease` (blank for New/Closed) |
-| Option Type | `Call`, `Put`, or `Equity` |
+| Security Type | `Equity`, `Call`, `Put`, or `Bond` (reported as a principal amount) |
 | Issuer Name (Current Quarter) | Name as reported in the current filing |
 | Issuer Name (Prior Quarter) | Name as reported in the prior filing |
 | CUSIP | 9-character CUSIP (stable identifier; used for cross-quarter matching) |
-| Ticker | 13F filings carry no tickers; resolved from the CUSIP via OpenFIGI (see `--tickers`) |
+| Ticker | 13F filings carry no tickers. Filled from the ticker store for every row whose CUSIP appears in the top-10 tables (calls and puts share their underlying's CUSIP); other rows are blank by design. For bonds this is the issuer's ticker, with OpenFIGI's full bond identifier in Notes |
 | Prior / Current Period | Reporting period end dates |
 | Prior / Current Shares | Share counts as reported |
 | Share Change | Current minus prior (negative = decrease) |
@@ -68,7 +68,7 @@ CIK **0001009207**, period **2026-06-30** compared with **2026-03-31**. Full tab
 | Prior / Current Market Value ($) | Market value in whole US dollars as reported (SEC switched from thousands in 2023) |
 | Market Value Change ($) | Current minus prior |
 | Prior / Current Filing Date | Date each 13F was filed with the SEC |
-| Notes | `Name changed`, `CUSIP changed`, or blank |
+| Notes | `Name changed`, `CUSIP changed`, `OpenFIGI security: …` (bond identifier), or blank |
 
 ### Largest movers (bottom of the summary CSV)
 

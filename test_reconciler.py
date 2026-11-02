@@ -413,6 +413,27 @@ def test_readme_latest_results_section():
     print("  README latest-results section: PASS")
 
 
+def test_detail_rows_security_type_and_tickers():
+    """Bonds are labelled Bond; resolved tickers fill every row sharing the CUSIP."""
+    import importlib
+    cli = importlib.import_module("13f_reconciler")
+    prior = [H("ACME", "AAA", 100), H("ACME", "AAA", 50, opt="Call"), H("OTHER", "OOO", 10)]
+    current = [H("ACME", "AAA", 400), H("ACME", "AAA", 90, opt="Call"), H("OTHER", "OOO", 99),
+               H("SUPER MICRO", "86800UAF1", 372_692_000, st="PRN")]
+    changes = compare_holdings(prior, current, make_filing("a", "a"), make_filing("b", "b"))
+    run_store.apply_tickers(changes, {"AAA": "ACM", "86800UAF1": "SMCI 0 06/15/30"})
+    rows = {(r[5], r[2]): r for r in map(cli._detail_row, changes)}
+    col = cli.DETAIL_HEADERS.index
+    assert cli.DETAIL_HEADERS[2] == "Security Type"
+    bond = rows[("86800UAF1", "Bond")]
+    assert bond[col("Ticker")] == "SMCI"
+    assert bond[col("Notes")] == "OpenFIGI security: SMCI 0 06/15/30"
+    assert rows[("AAA", "Equity")][col("Ticker")] == "ACM"
+    assert rows[("AAA", "Call")][col("Ticker")] == "ACM"       # option shares the CUSIP
+    assert rows[("OOO", "Equity")][col("Ticker")] == ""        # never looked up: stays blank
+    print("  detail security type and tickers: PASS")
+
+
 if __name__ == "__main__":
     print("Running tests...")
     test_parse()
@@ -431,4 +452,5 @@ if __name__ == "__main__":
     test_failed_lookup_is_flagged_and_not_recorded_as_not_found()
     test_commit_run_commits_only_run_files()
     test_readme_latest_results_section()
+    test_detail_rows_security_type_and_tickers()
     print("\nAll tests passed.")
