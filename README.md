@@ -24,6 +24,7 @@ fund manager, compares the most recent two quarters, and outputs the differences
 | Prior / Current Period | Reporting period end dates |
 | Prior / Current Shares | Share counts as reported |
 | Share Change | Current minus prior (negative = decrease) |
+| % Change | Share change as % of prior shares (blank for New/Closed) |
 | Prior / Current Market Value ($) | Market value in whole US dollars as reported (SEC switched from thousands in 2023) |
 | Market Value Change ($) | Current minus prior |
 | Prior / Current Filing Date | Date each 13F was filed with the SEC |
@@ -31,12 +32,13 @@ fund manager, compares the most recent two quarters, and outputs the differences
 
 ### Largest movers (bottom of the summary CSV)
 
-Top 10 per table, ranked by size, never by market value. Each asset class has its own
+Top 10 per table, never ranked by market value. Equity increases and decreases rank by % change
+from the prior filing; all other tables rank by share count (principal for bonds). Each asset class has its own
 tables and is never summed with another: rows are matched on CUSIP + put/call + SH/PRN.
 
 | Asset class | Tables | Ranked by |
 |---|---|---|
-| Equity | New, Closed, Increases, Decreases | shares |
+| Equity | New, Closed (shares); Increases, Decreases (% change) | see left |
 | Calls | New, Closed, Increases, Decreases | underlying shares |
 | Puts | New, Closed, Increases, Decreases | underlying shares |
 | Bonds | New | principal amount |
@@ -44,8 +46,14 @@ tables and is never summed with another: rows are matched on CUSIP + put/call + 
 New / Closed means the CUSIP appears in only one of the two filings. Increase / Decrease means
 it appears in both, and the change is current minus prior shares (filings only report positive
 counts). Price is never a criterion: a position with the same share count is left out even if
-its value moved. There is no minimum size. Rows for the same CUSIP (one per sub-manager) are
-summed first.
+its value moved. Rows for the same CUSIP (one per sub-manager) are summed first.
+
+**Equity thresholds** (`EQUITY_MIN_INCREASE_PCT` / `EQUITY_MIN_DECREASE_PCT` in
+`reconciler_core.py`): an equity position held in both filings counts only if shares rose at
+least **50%** or fell at least **33%** versus the prior filing. These two are the same size of
+move in each direction (100 → 150 is +50%; 150 → 100 is −33%). There is no dollar floor. The
+thresholds apply to the detail CSV, the summary counts and the tables. Calls, puts and bonds are
+not filtered.
 
 Tickers are looked up last, only for the rows in these tables (at most 130 CUSIPs); identifiers starting with a letter are
 sent as non-US CINS codes, via the

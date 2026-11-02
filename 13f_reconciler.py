@@ -42,6 +42,7 @@ DETAIL_HEADERS = [
     "Prior Shares",
     "Current Shares",
     "Share Change",
+    "% Change",
     "Prior Market Value ($)",
     "Current Market Value ($)",
     "Market Value Change ($)",
@@ -61,6 +62,12 @@ def _fmt(n: int) -> str:
     return f"{n:,}"
 
 
+def _pct(c: rc.PositionChange) -> str:
+    """% change vs prior filing; blank for New / Closed."""
+    pct = rc.pct_change(c)
+    return f"{pct:+,.1f}%" if pct is not None and c.category == "Changed" else ""
+
+
 def _detail_row(c: rc.PositionChange) -> list:
     return [
         c.category,
@@ -75,6 +82,7 @@ def _detail_row(c: rc.PositionChange) -> list:
         _fmt(c.prior_shares),
         _fmt(c.current_shares),
         _fmt(c.share_change),
+        _pct(c),
         _fmt(c.prior_market_value),
         _fmt(c.current_market_value),
         _fmt(c.market_value_change),
@@ -127,7 +135,7 @@ def _build_summary(changes: list[rc.PositionChange]) -> list[list]:
 TOP_N = 10
 TOP_HEADERS = [
     "Section", "Rank", "Ticker", "Issuer", "CUSIP", "Category",
-    "Prior Shares / Principal", "Current Shares / Principal", "Change",
+    "Prior Shares / Principal", "Current Shares / Principal", "Change", "% Change",
 ]
 CLASS_LABELS = {"Equity": "Equity", "Call": "Calls", "Put": "Puts", "Bond": "Bonds"}
 SECTION_LABELS = {
@@ -139,7 +147,9 @@ SECTION_LABELS = {
 def _top_rows(top: dict[tuple, list[rc.PositionChange]]) -> list[list]:
     rows: list[list] = []
     for cls, section in rc.TOP_SECTIONS:
-        unit = "principal" if cls == "Bond" else "underlying shares" if cls in ("Call", "Put") else "shares"
+        unit = ("principal" if cls == "Bond"
+                else "underlying shares" if cls in ("Call", "Put")
+                else "% change" if section in ("Increase", "Decrease") else "shares")
         label = f"{CLASS_LABELS[cls]} - {SECTION_LABELS[section]} (by {unit})"
         rows.append([])
         if not top[(cls, section)]:
@@ -149,6 +159,7 @@ def _top_rows(top: dict[tuple, list[rc.PositionChange]]) -> list[list]:
                 label, rank, c.ticker,
                 c.issuer_name_current or c.issuer_name_prior, c.cusip, c.category,
                 _fmt(c.prior_shares), _fmt(c.current_shares), _fmt(c.share_change),
+                _pct(c),
             ])
     return rows
 
@@ -224,6 +235,10 @@ def main() -> None:
     # --- Compare ---
     print("Comparing holdings...")
     changes = rc.compare_holdings(prior_holdings, current_holdings, prior_filing, current_filing)
+    before = len(changes)
+    changes = rc.apply_equity_thresholds(changes)
+    print(f"  Equity thresholds (+{rc.EQUITY_MIN_INCREASE_PCT:g}% / -{rc.EQUITY_MIN_DECREASE_PCT:g}%) "
+          f"dropped {before - len(changes)} smaller equity changes")
 
     new_c = sum(1 for c in changes if c.category == "New")
     closed_c = sum(1 for c in changes if c.category == "Closed")

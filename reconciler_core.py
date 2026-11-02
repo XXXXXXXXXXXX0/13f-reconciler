@@ -464,6 +464,35 @@ def asset_class(c: PositionChange) -> str:
     return c.option_type or "Equity"
 
 
+# Equity only: a position held in both filings counts as an increase or a
+# decrease only past these thresholds (% of the prior share count). Calls,
+# puts and bonds are not filtered.
+EQUITY_MIN_INCREASE_PCT = 50.0
+EQUITY_MIN_DECREASE_PCT = 33.0
+
+
+def pct_change(c: PositionChange) -> Optional[float]:
+    """Share change as a % of the prior share count; None when there was none."""
+    return c.share_change / c.prior_shares * 100 if c.prior_shares else None
+
+
+def _is_equity_move(c: PositionChange) -> bool:
+    return (asset_class(c) == "Equity" and c.category == "Changed"
+            and c.direction in ("Increase", "Decrease"))
+
+
+def apply_equity_thresholds(changes: list[PositionChange]) -> list[PositionChange]:
+    """Drop equity increases under +50% and decreases under -33%."""
+    def keep(c: PositionChange) -> bool:
+        if not _is_equity_move(c):
+            return True
+        pct = pct_change(c)
+        if c.direction == "Increase":
+            return pct >= EQUITY_MIN_INCREASE_PCT
+        return pct <= -EQUITY_MIN_DECREASE_PCT
+    return [c for c in changes if keep(c)]
+
+
 def top_movers(changes: list[PositionChange], n: int = 10) -> dict[tuple, list[PositionChange]]:
     """
     Top-n positions per (asset class, section), ranked by size, never by value.
@@ -472,7 +501,9 @@ def top_movers(changes: list[PositionChange], n: int = 10) -> dict[tuple, list[P
     never summed together (the matching key includes put/call and SH/PRN).
     New / Closed means the CUSIP is only in one filing; Increase / Decrease
     means it is in both and the count is current minus prior (filings only
-    report positive counts). Bonds rank by principal amount.
+    report positive counts). Equity increases / decreases rank by % change
+    from the prior filing; everything else by share count (principal for
+    bonds).
     """
     def wanted(c: PositionChange, cls: str, section: str) -> bool:
         if asset_class(c) != cls:
@@ -485,7 +516,8 @@ def top_movers(changes: list[PositionChange], n: int = 10) -> dict[tuple, list[P
     return {
         (cls, section): sorted(
             (c for c in changes if wanted(c, cls, section)),
-            key=lambda c: abs(c.share_change), reverse=True,
+            key=lambda c: abs(pct_change(c)) if _is_equity_move(c) else abs(c.share_change),
+            reverse=True,
         )[:n]
         for cls, section in TOP_SECTIONS
     }
@@ -535,13 +567,14 @@ def lookup_tickers(cusips: list[str], api_key: Optional[str] = None,
         chunk = unique[i:i + batch]
         jobs = [{"idType": _id_type(c), "idValue": c} for c in chunk]
         try:
-            try:
-                results = post(OPENFIGI_URL, jobs, headers)
-            except HTTPError as e:
-                if e.code != 429:
-                    raise
-                sleep(30)
-                results = post(OPENFIGI_URL, jobs, headers)
+            for attempt in range(3):          # rate limit is per minute: wait it out
+                try:
+                    results = post(OPENFIGI_URL, jobs, headers)
+                    break
+                except HTTPError as e:
+                    if e.code != 429 or attempt == 2:
+                        raise
+                    sleep(60)
         except (HTTPError, URLError, OSError, ValueError) as e:
             print(f"  WARNING: ticker lookup failed ({e}); tickers left blank.")
             return found

@@ -5,6 +5,7 @@ Run: python test_reconciler.py
 
 import sys
 import textwrap
+from urllib.error import HTTPError
 from pathlib import Path
 
 # Synthetic 13F information-table XML (mirrors the SEC EDGAR format)
@@ -104,7 +105,7 @@ CURRENT_XML = textwrap.dedent("""\
 sys.path.insert(0, str(Path(__file__).parent))
 from reconciler_core import (
     parse_info_table_xml, compare_holdings, FilingMeta, Holding,
-    aggregate_holdings, top_movers, lookup_tickers,
+    aggregate_holdings, top_movers, lookup_tickers, apply_equity_thresholds,
 )
 
 
@@ -243,6 +244,25 @@ def test_unchanged_share_count_is_not_an_increase():
     print("  unchanged count not an increase: PASS")
 
 
+def test_equity_thresholds_and_pct_ranking():
+    """Equity: keep >= +50% and <= -33%; rank by %. Options are not filtered."""
+    prior = [H("UP49", "A", 100), H("UP50", "B", 100), H("TINY", "C", 807),
+             H("DN32", "D", 1_000), H("DN33", "E", 1_000), H("BIGDN", "F", 9_000_000), H("DN90", "H", 1_000),
+             H("OPT", "G", 100, opt="Call")]
+    current = [H("UP49", "A", 149), H("UP50", "B", 150), H("TINY", "C", 240_298),
+               H("DN32", "D", 680), H("DN33", "E", 670), H("BIGDN", "F", 4_000_000), H("DN90", "H", 100),
+               H("OPT", "G", 101, opt="Call")]
+    changes = apply_equity_thresholds(
+        compare_holdings(prior, current, make_filing("a", "a"), make_filing("b", "b")))
+    names = {c.issuer_name_current for c in changes}
+    assert names == {"UP50", "TINY", "DN33", "BIGDN", "DN90", "OPT"}
+    top = top_movers(changes)
+    assert [c.issuer_name_current for c in top[("Equity", "Increase")]] == ["TINY", "UP50"]
+    # DN90 (-900 shares, -90%) outranks BIGDN (-5M shares, -55.6%): % not share count
+    assert [c.issuer_name_current for c in top[("Equity", "Decrease")]] == ["DN90", "BIGDN", "DN33"]
+    print("  equity thresholds and % ranking: PASS")
+
+
 def test_lookup_tickers_with_mocked_openfigi():
     calls = []
 
@@ -263,6 +283,15 @@ def test_lookup_tickers_with_mocked_openfigi():
     assert got == {"AAA": "AAA"}
     assert calls == [10, 3]          # de-duplicated, batched 10 per request without a key
 
+    tries = []
+
+    def limited_then_ok(url, jobs, headers):
+        tries.append(1)
+        if len(tries) < 3:
+            raise HTTPError(url, 429, "Too Many Requests", {}, None)
+        return [{"data": [{"ticker": "AAA", "exchCode": "US"}]}]
+    assert lookup_tickers(["AAA"], post=limited_then_ok, sleep=lambda s: None) == {"AAA": "AAA"}
+
     def boom(url, jobs, headers):
         raise OSError("blocked")
     assert lookup_tickers(["AAA"], post=boom, sleep=lambda s: None) == {}
@@ -279,5 +308,6 @@ if __name__ == "__main__":
     test_decrease_is_computed_from_prior_filing()
     test_options_ranked_separately_from_equity()
     test_unchanged_share_count_is_not_an_increase()
+    test_equity_thresholds_and_pct_ranking()
     test_lookup_tickers_with_mocked_openfigi()
     print("\nAll tests passed.")
