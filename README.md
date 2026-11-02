@@ -3,6 +3,14 @@
 Pulls 13F-HR filings from **SEC EDGAR** (no paid API required) for any institutional
 fund manager, compares the most recent two quarters, and outputs the differences to CSV.
 
+## Latest results
+
+Updated automatically by each committed run (`13f_reconciler.py` rewrites the text between the
+markers below). It shows whichever fund was run most recently.
+
+<!-- latest-results:start -->
+<!-- latest-results:end -->
+
 ## What it produces
 
 | File | Contents |
@@ -137,8 +145,16 @@ Common CIKs:
 ## Running tests
 
 ```bash
-python test_reconciler.py
+python test_reconciler.py      # or: pytest -q test_reconciler.py
 ```
+
+GitHub Actions (`.github/workflows/tests.yml`) runs the tests on every push and pull request.
+The tests need no network access.
+
+## Commit messages
+
+Say what changed and why: a short summary line, then the reasons in the body. Commits made by
+a run are always `13F run: CIK <CIK>, period <period>`.
 
 ## SEC EDGAR rate limits
 

@@ -276,12 +276,15 @@ def main() -> None:
               extra=[[], TOP_HEADERS, *_top_rows(top)])
     run_store.write_json(store_path, res.store)
 
-    # --- Commit + push exactly these files ---
+    # --- Commit + push exactly these files (README updated only for committed runs) ---
     if args.no_commit:
-        print("Skipping commit (--no-commit).")
+        print("Skipping commit and README update (--no-commit).")
     else:
+        readme = run_store.REPO_ROOT / "README.md"
+        run_store.update_readme(readme, run_store.render_latest_results(
+            cik, period, prior_filing.period, top, summary_path))
         status = run_store.commit_run(
-            [detail_path, summary_path, store_path],
+            [detail_path, summary_path, store_path, readme],
             f"13F run: CIK {cik}, period {period}")
         print({"pushed": "Committed and pushed.",
                "unchanged": "No changes since the last committed run; nothing to commit."}

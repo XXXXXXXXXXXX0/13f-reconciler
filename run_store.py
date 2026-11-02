@@ -112,3 +112,50 @@ def commit_run(paths: list[Path], message: str, root: Path = REPO_ROOT,
             raise RuntimeError(f"Committed, but push to origin/{branch} failed:\n{res.stderr.strip()}")
         sleep(wait)
     return "committed"  # unreachable
+
+
+# ---------------------------------------------------------------------------
+# README "Latest results" section
+# ---------------------------------------------------------------------------
+
+README_START = "<!-- latest-results:start -->"
+README_END = "<!-- latest-results:end -->"
+
+
+def render_latest_results(cik: str, period: str, prior_period: str,
+                          top: dict, summary_path: Path, root: Path = REPO_ROOT) -> str:
+    """Markdown for the newest run's equity increase / decrease tables."""
+    rel = summary_path.resolve().relative_to(root.resolve()).as_posix()
+    lines = [
+        f"CIK **{cik}**, period **{period}** compared with **{prior_period}**. "
+        f"Full tables: [`{rel}`]({rel}).",
+        "",
+    ]
+    for section, title in (("Increase", "Top equity increases (≥ +50%)"),
+                           ("Decrease", "Top equity decreases (≥ −33%)")):
+        lines += [f"**{title}**", "",
+                  "| # | Ticker | Issuer | Prior shares | Current shares | % change |",
+                  "|---|---|---|---:|---:|---:|"]
+        rows = top.get(("Equity", section), [])
+        for i, c in enumerate(rows, 1):
+            lines.append(f"| {i} | {c.ticker or '—'} | {c.issuer_name_current} | "
+                         f"{c.prior_shares:,} | {c.current_shares:,} | {rc.pct_change(c):+,.1f}% |")
+        if not rows:
+            lines.append("| | | None this quarter | | | |")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def update_readme(readme: Path, section: str) -> bool:
+    """Replace the text between the markers; returns True if the file changed."""
+    text = readme.read_text(encoding="utf-8")
+    start, end = text.find(README_START), text.find(README_END)
+    if start == -1 or end == -1 or end < start:
+        raise ValueError(f"{readme.name} is missing the {README_START} / {README_END} markers")
+    new = text[:start + len(README_START)] + "\n" + section + text[end:]
+    if new == text:
+        return False
+    tmp = readme.with_suffix(readme.suffix + ".tmp")
+    tmp.write_text(new, encoding="utf-8")
+    os.replace(tmp, readme)
+    return True

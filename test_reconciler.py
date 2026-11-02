@@ -390,6 +390,29 @@ def test_commit_run_commits_only_run_files():
     print("  commit_run commits only run files: PASS")
 
 
+def test_readme_latest_results_section():
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        readme = root / "README.md"
+        readme.write_text(f"# X\n\n{run_store.README_START}\nold\n{run_store.README_END}\n\n## Rest\n")
+        changes = compare_holdings([H("UPCO", "A", 100), H("DNCO", "B", 1_000)],
+                                   [H("UPCO", "A", 400), H("DNCO", "B", 100)],
+                                   make_filing("2026-03-31", "x"), make_filing("2026-06-30", "y"))
+        top = top_movers(changes)
+        top[("Equity", "Increase")][0].ticker = "UPC"
+        summary = root / "results" / "0001_2026-06-30" / "s.csv"
+        section = run_store.render_latest_results("0001", "2026-06-30", "2026-03-31", top, summary, root)
+        assert "| 1 | UPC | UPCO | 100 | 400 | +300.0% |" in section
+        assert "| 1 | — | DNCO | 1,000 | 100 | -90.0% |" in section
+        assert "results/0001_2026-06-30/s.csv" in section
+
+        assert run_store.update_readme(readme, section) is True
+        text = readme.read_text()
+        assert "old" not in text and text.startswith("# X") and text.endswith("## Rest\n")
+        assert run_store.update_readme(readme, section) is False   # same run: no change
+    print("  README latest-results section: PASS")
+
+
 if __name__ == "__main__":
     print("Running tests...")
     test_parse()
@@ -407,4 +430,5 @@ if __name__ == "__main__":
     test_new_period_does_fresh_lookup()
     test_failed_lookup_is_flagged_and_not_recorded_as_not_found()
     test_commit_run_commits_only_run_files()
+    test_readme_latest_results_section()
     print("\nAll tests passed.")
