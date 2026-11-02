@@ -37,15 +37,18 @@ tables and is never summed with another: rows are matched on CUSIP + put/call + 
 | Asset class | Tables | Ranked by |
 |---|---|---|
 | Equity | New, Closed, Increases, Decreases | shares |
-| Calls | Increases (incl. newly opened), Decreases (incl. fully closed) | underlying shares |
-| Puts | Increases (incl. newly opened), Decreases (incl. fully closed) | underlying shares |
+| Calls | New, Closed, Increases, Decreases | underlying shares |
+| Puts | New, Closed, Increases, Decreases | underlying shares |
 | Bonds | New | principal amount |
 
-Filings only report positive counts, so a change is current minus prior for the same CUSIP.
-There is no minimum size: any change counts. Rows for the same CUSIP (one per sub-manager)
-are summed first. A position whose count did not change is `No Change`, not an increase.
+New / Closed means the CUSIP appears in only one of the two filings. Increase / Decrease means
+it appears in both, and the change is current minus prior shares (filings only report positive
+counts). Price is never a criterion: a position with the same share count is left out even if
+its value moved. There is no minimum size. Rows for the same CUSIP (one per sub-manager) are
+summed first.
 
-Tickers are looked up last, only for the rows in these tables (at most 90 CUSIPs), via the
+Tickers are looked up last, only for the rows in these tables (at most 130 CUSIPs); identifiers starting with a letter are
+sent as non-US CINS codes, via the
 free OpenFIGI API (`api.openfigi.com`; set `OPENFIGI_API_KEY` for higher limits). The detail
 CSV is not looked up. If the lookup fails, tickers stay blank.
 
@@ -55,7 +58,7 @@ CSV is not looked up. If the lookup fails, tickers stay blank.
 - Closed Positions
 - Changed – Increase
 - Changed – Decrease
-- Changed – No Change (share count unchanged; value moved)
+- Changed – No Change (share count unchanged; kept only for a name/CUSIP-change note)
 - Total Changed (all directions)
 - GRAND TOTAL
 

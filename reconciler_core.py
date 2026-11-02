@@ -424,11 +424,11 @@ def compare_holdings(
 
         share_delta = cur.shares - pri.shares
         mv_delta = cur.market_value - pri.market_value
-        if share_delta == 0 and mv_delta == 0 and not note:
-            continue  # truly unchanged; exclude from output
+        if share_delta == 0 and not note:
+            continue  # same share count: a price-only move is not a position change
 
-        # No size threshold: any change in share count counts. A position whose
-        # count is unchanged (price move only) is "No Change", not an increase.
+        # No size threshold: any change in share count counts. Price is never a
+        # criterion; "No Change" only appears on rows kept for a name/CUSIP note.
         direction = ("Increase" if share_delta > 0
                      else "Decrease" if share_delta < 0 else "No Change")
         results.append(_make_change("Changed", direction, cur, pri, note))
@@ -451,8 +451,8 @@ def compare_holdings(
 
 TOP_SECTIONS = (
     ("Equity", "New"), ("Equity", "Closed"), ("Equity", "Increase"), ("Equity", "Decrease"),
-    ("Call", "Increase"), ("Call", "Decrease"),
-    ("Put", "Increase"), ("Put", "Decrease"),
+    ("Call", "New"), ("Call", "Closed"), ("Call", "Increase"), ("Call", "Decrease"),
+    ("Put", "New"), ("Put", "Closed"), ("Put", "Increase"), ("Put", "Decrease"),
     ("Bond", "New"),
 )
 
@@ -470,10 +470,9 @@ def top_movers(changes: list[PositionChange], n: int = 10) -> dict[tuple, list[P
 
     Equity, calls, puts and bonds are ranked in separate tables; they were
     never summed together (the matching key includes put/call and SH/PRN).
-    A change is current minus prior for the same key, since filings only
-    report positive counts. For calls and puts, Increase includes newly
-    opened positions and Decrease includes fully closed ones. Bonds rank by
-    principal amount.
+    New / Closed means the CUSIP is only in one filing; Increase / Decrease
+    means it is in both and the count is current minus prior (filings only
+    report positive counts). Bonds rank by principal amount.
     """
     def wanted(c: PositionChange, cls: str, section: str) -> bool:
         if asset_class(c) != cls:
@@ -481,7 +480,7 @@ def top_movers(changes: list[PositionChange], n: int = 10) -> dict[tuple, list[P
         if section in ("New", "Closed"):
             return c.category == section
         moved = c.share_change > 0 if section == "Increase" else c.share_change < 0
-        return moved and (cls != "Equity" or c.category == "Changed")
+        return moved and c.category == "Changed"
 
     return {
         (cls, section): sorted(
@@ -515,6 +514,11 @@ def _pick_ticker(matches: list[dict]) -> str:
     return with_ticker[0]["ticker"] if with_ticker else ""
 
 
+def _id_type(cusip: str) -> str:
+    """Identifiers starting with a letter (e.g. G..., Q...) are non-US CINS codes."""
+    return "ID_CINS" if cusip[:1].isalpha() else "ID_CUSIP"
+
+
 def lookup_tickers(cusips: list[str], api_key: Optional[str] = None,
                    post=_post_json, sleep=time.sleep) -> dict[str, str]:
     """
@@ -529,7 +533,7 @@ def lookup_tickers(cusips: list[str], api_key: Optional[str] = None,
     found: dict[str, str] = {}
     for i in range(0, len(unique), batch):
         chunk = unique[i:i + batch]
-        jobs = [{"idType": "ID_CUSIP", "idValue": c} for c in chunk]
+        jobs = [{"idType": _id_type(c), "idValue": c} for c in chunk]
         try:
             try:
                 results = post(OPENFIGI_URL, jobs, headers)

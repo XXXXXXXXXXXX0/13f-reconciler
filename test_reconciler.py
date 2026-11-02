@@ -229,16 +229,17 @@ def test_options_ranked_separately_from_equity():
     top = top_movers(changes)
     assert top[("Equity", "Increase")] == []                      # stock count unchanged
     assert [c.share_change for c in top[("Call", "Increase")]] == [49_500]
-    assert [c.category for c in top[("Put", "Increase")]] == ["New"]   # opened from zero
-    assert [c.category for c in top[("Put", "Decrease")]] == ["Closed"]
+    # CUSIP absent from the prior filing = New, not an increase (and vice versa)
+    assert [c.category for c in top[("Put", "New")]] == ["New"]
+    assert [c.category for c in top[("Put", "Closed")]] == ["Closed"]
+    assert top[("Put", "Increase")] == [] and top[("Put", "Decrease")] == []
     print("  options ranked separately: PASS")
 
 
 def test_unchanged_share_count_is_not_an_increase():
     changes = compare_holdings([H("FLAT", "F", 100, 10)], [H("FLAT", "F", 100, 99)],
                                make_filing("a", "a"), make_filing("b", "b"))
-    assert changes[0].direction == "No Change"
-    assert all(not rows for rows in top_movers(changes).values())
+    assert changes == []  # value moved, share count did not: not a position change
     print("  unchanged count not an increase: PASS")
 
 
@@ -249,6 +250,7 @@ def test_lookup_tickers_with_mocked_openfigi():
         calls.append(len(jobs))
         out = []
         for j in jobs:
+            assert j["idType"] == ("ID_CINS" if j["idValue"][0].isalpha() else "ID_CUSIP")
             if j["idValue"] == "AAA":
                 out.append({"data": [{"ticker": "AAA.F", "exchCode": "GR"},
                                      {"ticker": "AAA", "exchCode": "US"}]})
@@ -256,7 +258,7 @@ def test_lookup_tickers_with_mocked_openfigi():
                 out.append({"warning": "No identifier found."})
         return out
 
-    got = lookup_tickers(["aaa", "AAA", "BBB"] + [f"X{i}" for i in range(11)],
+    got = lookup_tickers(["aaa", "AAA", "BBB"] + [f"{i}X" for i in range(11)],
                          post=fake_post, sleep=lambda s: None)
     assert got == {"AAA": "AAA"}
     assert calls == [10, 3]          # de-duplicated, batched 10 per request without a key
