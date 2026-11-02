@@ -9,6 +9,37 @@ Updated automatically by each committed run (`13f_reconciler.py` rewrites the te
 markers below). It shows whichever fund was run most recently.
 
 <!-- latest-results:start -->
+CIK **0001009207**, period **2026-06-30** compared with **2026-03-31**. Full tables: [`results/0001009207_2026-06-30/13f_summary_0001009207_2026-06-30.csv`](results/0001009207_2026-06-30/13f_summary_0001009207_2026-06-30.csv).
+
+**Top equity increases (≥ +50%)**
+
+| # | Ticker | Issuer | Prior shares | Current shares | % change |
+|---|---|---|---:|---:|---:|
+| 1 | EWZ | ISHARES INC | 12,380 | 7,120,968 | +57,419.9% |
+| 2 | XLE | SELECT SECTOR SPDR TR | 16,440 | 7,531,605 | +45,712.7% |
+| 3 | AEIS | ADVANCED ENERGY INDS | 1,600 | 585,573 | +36,498.3% |
+| 4 | HLT | HILTON WORLDWIDE HLDGS INC | 807 | 240,298 | +29,676.7% |
+| 5 | VUG | VANGUARD INDEX FDS | 1,424 | 201,707 | +14,064.8% |
+| 6 | DELL | DELL TECHNOLOGIES INC | 7,629 | 973,711 | +12,663.3% |
+| 7 | CACI | CACI INTL INC | 1,246 | 157,665 | +12,553.7% |
+| 8 | DOCN | DIGITALOCEAN HLDGS INC | 7,000 | 880,572 | +12,479.6% |
+| 9 | RYAAY | RYANAIR HOLDINGS PLC | 5,400 | 644,450 | +11,834.3% |
+| 10 | INTU | INTUIT | 17,929 | 2,135,509 | +11,810.9% |
+
+**Top equity decreases (≥ −33%)**
+
+| # | Ticker | Issuer | Prior shares | Current shares | % change |
+|---|---|---|---:|---:|---:|
+| 1 | HOOD | ROBINHOOD MKTS INC | 2,873,569 | 14,600 | -99.5% |
+| 2 | BABA | ALIBABA GROUP HLDG LTD | 726,244 | 4,473 | -99.4% |
+| 3 | AZO | AUTOZONE INC | 44,034 | 364 | -99.2% |
+| 4 | CRCL | CIRCLE INTERNET GROUP INC | 2,734,925 | 27,976 | -99.0% |
+| 5 | OPEN | OPENDOOR TECHNOLOGIES INC | 11,230,177 | 121,686 | -98.9% |
+| 6 | RVMD | REVOLUTION MEDICINES INC | 1,022,298 | 12,400 | -98.8% |
+| 7 | VRTX | VERTEX PHARMACEUTICALS INC | 248,960 | 3,105 | -98.8% |
+| 8 | MSI | MOTOROLA SOLUTIONS INC | 92,443 | 1,600 | -98.3% |
+| 9 | ARM | ARM HOLDINGS PLC | 306,620 | 5,764 | -98.1% |
+| 10 | AAOI | APPLIED OPTOELECTRONICS INC | 2,117,157 | 41,056 | -98.1% |
 <!-- latest-results:end -->
 
 ## What it produces
