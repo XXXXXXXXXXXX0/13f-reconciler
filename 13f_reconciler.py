@@ -23,6 +23,7 @@ import sys
 from pathlib import Path
 
 import reconciler_core as rc
+import run_store
 
 
 # ---------------------------------------------------------------------------
@@ -164,11 +165,17 @@ def _top_rows(top: dict[tuple, list[rc.PositionChange]]) -> list[list]:
     return rows
 
 
-def write_csv(path: Path, headers: list[str], rows: list[list]) -> None:
-    with open(path, "w", newline="", encoding="utf-8") as f:
+def write_csv(path: Path, headers: list[str], rows: list[list],
+              extra: list[list] = ()) -> None:
+    """Write via a temp file so a failed run never leaves a half-written CSV."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".csv.tmp")
+    with open(tmp, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(headers)
         w.writerows(rows)
+        w.writerows(extra)
+    os.replace(tmp, path)
     print(f"  Wrote {len(rows)} data rows → {path}")
 
 
@@ -186,8 +193,8 @@ def main() -> None:
     id_grp.add_argument("--cik", help="SEC CIK number (e.g. 0001067983)")
     id_grp.add_argument("--name", help='Fund manager name to search for (e.g. "Berkshire Hathaway")')
     parser.add_argument(
-        "--output", default=".",
-        help="Output directory for CSV files (default: current directory)",
+        "--no-commit", action="store_true",
+        help="Write results and the ticker store but do not commit or push.",
     )
     parser.add_argument(
         "--email",
@@ -202,9 +209,6 @@ def main() -> None:
     if args.email:
         rc.USER_AGENT = f"13F-Reconciler {args.email}"
         rc.HEADERS["User-Agent"] = rc.USER_AGENT
-
-    out_dir = Path(args.output)
-    out_dir.mkdir(parents=True, exist_ok=True)
 
     # --- Resolve CIK ---
     print("Resolving CIK...")
@@ -248,30 +252,45 @@ def main() -> None:
     # --- Largest movers, then tickers for those rows only (last step) ---
     top = rc.top_movers(changes, TOP_N)
     finalists = [c for rows in top.values() for c in rows]
-    print(f"Looking up tickers for {len({c.cusip for c in finalists})} CUSIPs in the top tables (OpenFIGI)...")
-    tickers = rc.lookup_tickers([c.cusip for c in finalists], os.environ.get("OPENFIGI_API_KEY"))
+    period = current_filing.period
+    store_path = run_store.ticker_store_path(cik, period)
+    api_key = os.environ.get("OPENFIGI_API_KEY")
+    res = run_store.resolve_tickers([c.cusip for c in finalists], cik, period,
+                                    lookup=lambda cusips: rc.lookup_tickers(cusips, api_key))
+    print(f"Tickers: {len({c.cusip for c in finalists})} CUSIPs in the final tables, "
+          f"{len(res.looked_up)} looked up on OpenFIGI, the rest reused from {store_path.name}")
+    if res.failed:
+        print("ERROR: ticker lookup failed partway. Nothing was written or committed; "
+              "re-run to retry (stored tickers are reused).", file=sys.stderr)
+        sys.exit(1)
     for c in finalists:
-        c.ticker = tickers.get(c.cusip.strip().upper(), "")
-    print(f"  Resolved {len(tickers)} tickers")
+        c.ticker = res.tickers.get(c.cusip.strip().upper(), "")
 
-    # --- Write CSVs ---
-    safe_period = current_filing.period.replace("-", "")
-    detail_path = out_dir / f"13f_changes_{cik}_{safe_period}.csv"
-    summary_path = out_dir / f"13f_summary_{cik}_{safe_period}.csv"
-
+    # --- Write results + ticker store into the repo (only after every step succeeded) ---
+    out_dir = run_store.results_dir(cik, period)
+    detail_path = out_dir / f"13f_changes_{cik}_{period}.csv"
+    summary_path = out_dir / f"13f_summary_{cik}_{period}.csv"
     print("Writing output files...")
     write_csv(detail_path, DETAIL_HEADERS, [_detail_row(c) for c in changes])
-    summary_rows = _build_summary(changes)
-    write_csv(summary_path, SUMMARY_HEADERS, summary_rows)
-    with open(summary_path, "a", newline="", encoding="utf-8") as f:
-        w = csv.writer(f)
-        w.writerow([])
-        w.writerow(TOP_HEADERS)
-        w.writerows(_top_rows(top))
+    write_csv(summary_path, SUMMARY_HEADERS, _build_summary(changes),
+              extra=[[], TOP_HEADERS, *_top_rows(top)])
+    run_store.write_json(store_path, res.store)
+
+    # --- Commit + push exactly these files ---
+    if args.no_commit:
+        print("Skipping commit (--no-commit).")
+    else:
+        status = run_store.commit_run(
+            [detail_path, summary_path, store_path],
+            f"13F run: CIK {cik}, period {period}")
+        print({"pushed": "Committed and pushed.",
+               "unchanged": "No changes since the last committed run; nothing to commit."}
+              .get(status, status))
 
     print("\nComplete.")
     print(f"  Detail CSV : {detail_path}")
     print(f"  Summary CSV: {summary_path}")
+    print(f"  Tickers    : {store_path}")
 
 
 if __name__ == "__main__":

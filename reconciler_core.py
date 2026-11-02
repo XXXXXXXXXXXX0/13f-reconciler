@@ -551,18 +551,25 @@ def _id_type(cusip: str) -> str:
     return "ID_CINS" if cusip[:1].isalpha() else "ID_CUSIP"
 
 
+@dataclass
+class TickerLookup:
+    found: dict          # CUSIP -> ticker
+    not_found: set       # CUSIPs OpenFIGI answered with no match
+    failed: bool         # True if a request errored; unanswered CUSIPs are in neither set
+
+
 def lookup_tickers(cusips: list[str], api_key: Optional[str] = None,
-                   post=_post_json, sleep=time.sleep) -> dict[str, str]:
+                   post=_post_json, sleep=time.sleep) -> TickerLookup:
     """
     Map CUSIPs to tickers with the OpenFIGI API (free; set OPENFIGI_API_KEY for
-    higher limits). Returns only the CUSIPs it resolved; never raises, so a
-    blocked or rate-limited lookup just leaves tickers blank.
+    higher limits). Never raises: a blocked or rate-limited lookup stops early
+    and sets `failed`, so the caller can decide not to save a partial result.
     """
     unique = list(dict.fromkeys(c.strip().upper() for c in cusips if c.strip()))
     batch = 100 if api_key else 10          # per-request job limit
     pause = 0.3 if api_key else 2.6         # 25 req/min without a key
     headers = {"X-OPENFIGI-APIKEY": api_key} if api_key else {}
-    found: dict[str, str] = {}
+    result = TickerLookup(found={}, not_found=set(), failed=False)
     for i in range(0, len(unique), batch):
         chunk = unique[i:i + batch]
         jobs = [{"idType": _id_type(c), "idValue": c} for c in chunk]
@@ -576,11 +583,14 @@ def lookup_tickers(cusips: list[str], api_key: Optional[str] = None,
                         raise
                     sleep(60)
         except (HTTPError, URLError, OSError, ValueError) as e:
-            print(f"  WARNING: ticker lookup failed ({e}); tickers left blank.")
-            return found
+            print(f"  WARNING: ticker lookup failed ({e}).")
+            result.failed = True
+            return result
         for cusip, res in zip(chunk, results):
             ticker = _pick_ticker(res.get("data", [])) if isinstance(res, dict) else ""
             if ticker:
-                found[cusip] = ticker
+                result.found[cusip] = ticker
+            else:
+                result.not_found.add(cusip)
         sleep(pause)
-    return found
+    return result

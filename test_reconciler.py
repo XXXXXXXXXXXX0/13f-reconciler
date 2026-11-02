@@ -3,7 +3,10 @@ Unit tests for 13F reconciler logic using synthetic 13F XML data.
 Run: python test_reconciler.py
 """
 
+import json
+import subprocess
 import sys
+import tempfile
 import textwrap
 from urllib.error import HTTPError
 from pathlib import Path
@@ -105,8 +108,9 @@ CURRENT_XML = textwrap.dedent("""\
 sys.path.insert(0, str(Path(__file__).parent))
 from reconciler_core import (
     parse_info_table_xml, compare_holdings, FilingMeta, Holding,
-    aggregate_holdings, top_movers, lookup_tickers, apply_equity_thresholds,
+    aggregate_holdings, top_movers, lookup_tickers, apply_equity_thresholds, TickerLookup,
 )
+import run_store
 
 
 def make_filing(period: str, filed: str) -> FilingMeta:
@@ -280,7 +284,8 @@ def test_lookup_tickers_with_mocked_openfigi():
 
     got = lookup_tickers(["aaa", "AAA", "BBB"] + [f"{i}X" for i in range(11)],
                          post=fake_post, sleep=lambda s: None)
-    assert got == {"AAA": "AAA"}
+    assert got.found == {"AAA": "AAA"} and not got.failed
+    assert got.not_found == {"BBB"} | {f"{i}X" for i in range(11)}
     assert calls == [10, 3]          # de-duplicated, batched 10 per request without a key
 
     tries = []
@@ -290,12 +295,99 @@ def test_lookup_tickers_with_mocked_openfigi():
         if len(tries) < 3:
             raise HTTPError(url, 429, "Too Many Requests", {}, None)
         return [{"data": [{"ticker": "AAA", "exchCode": "US"}]}]
-    assert lookup_tickers(["AAA"], post=limited_then_ok, sleep=lambda s: None) == {"AAA": "AAA"}
+    assert lookup_tickers(["AAA"], post=limited_then_ok, sleep=lambda s: None).found == {"AAA": "AAA"}
 
     def boom(url, jobs, headers):
         raise OSError("blocked")
-    assert lookup_tickers(["AAA"], post=boom, sleep=lambda s: None) == {}
+    failed = lookup_tickers(["AAA"], post=boom, sleep=lambda s: None)
+    assert failed.failed and failed.found == {} and failed.not_found == set()
     print("  lookup_tickers: PASS")
+
+
+# ---------------------------------------------------------------------------
+# Ticker store and per-run commit
+# ---------------------------------------------------------------------------
+
+class FakeLookup:
+    """Stands in for OpenFIGI and records every CUSIP it is asked about."""
+    def __init__(self, known, failed=False):
+        self.known, self.failed, self.calls = known, failed, []
+
+    def __call__(self, cusips):
+        self.calls.append(list(cusips))
+        found = {c: self.known[c] for c in cusips if c in self.known}
+        missing = set() if self.failed else set(cusips) - set(found)
+        return TickerLookup(found=found, not_found=missing, failed=self.failed)
+
+
+def test_same_period_reuses_store_without_lookup():
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        first = FakeLookup({"AAA": "AA", "BBB": "BB"})
+        res = run_store.resolve_tickers(["AAA", "BBB", "ZZZ"], "0001", "2026-06-30", root, first)
+        run_store.write_json(run_store.ticker_store_path("0001", "2026-06-30", root), res.store)
+        assert first.calls == [["AAA", "BBB", "ZZZ"]]
+
+        again = FakeLookup({})
+        res2 = run_store.resolve_tickers(["AAA", "BBB", "ZZZ"], "0001", "2026-06-30", root, again)
+        assert again.calls == []                       # zero OpenFIGI calls
+        assert res2.tickers == {"AAA": "AA", "BBB": "BB"}
+        assert res2.store["not_found"] == ["ZZZ"]      # not-found is remembered, not retried
+    print("  ticker store reused within a period: PASS")
+
+
+def test_only_missing_cusips_are_looked_up():
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        run_store.write_json(run_store.ticker_store_path("0001", "2026-06-30", root),
+                             {"tickers": {"AAA": "AA"}, "not_found": ["ZZZ"]})
+        lookup = FakeLookup({"CCC": "CC"})
+        res = run_store.resolve_tickers(["AAA", "ZZZ", "CCC"], "0001", "2026-06-30", root, lookup)
+        assert lookup.calls == [["CCC"]]
+        assert res.tickers == {"AAA": "AA", "CCC": "CC"}
+        assert res.store["tickers"] == {"AAA": "AA", "CCC": "CC"}
+    print("  only missing CUSIPs looked up: PASS")
+
+
+def test_new_period_does_fresh_lookup():
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        old_path = run_store.ticker_store_path("0001", "2026-06-30", root)
+        run_store.write_json(old_path, {"tickers": {"AAA": "OLD"}, "not_found": ["ZZZ"]})
+        lookup = FakeLookup({"AAA": "NEW", "ZZZ": "ZZ"})
+        res = run_store.resolve_tickers(["AAA", "ZZZ"], "0001", "2026-09-30", root, lookup)
+        assert lookup.calls == [["AAA", "ZZZ"]]        # prior quarter's file is not used
+        assert res.tickers == {"AAA": "NEW", "ZZZ": "ZZ"}
+        assert json.loads(old_path.read_text())["tickers"] == {"AAA": "OLD"}
+    print("  new period looked up fresh: PASS")
+
+
+def test_failed_lookup_is_flagged_and_not_recorded_as_not_found():
+    with tempfile.TemporaryDirectory() as d:
+        res = run_store.resolve_tickers(["AAA"], "0001", "2026-06-30", Path(d),
+                                        FakeLookup({}, failed=True))
+        assert res.failed and res.store["not_found"] == []
+    print("  failed lookup flagged: PASS")
+
+
+def test_commit_run_commits_only_run_files():
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        git = lambda *a: subprocess.run(["git", *a], cwd=root, check=True, capture_output=True)
+        git("init", "-q")
+        git("config", "user.email", "t@example.com")
+        git("config", "user.name", "t")
+        (root / "unrelated.txt").write_text("x")
+        git("add", "unrelated.txt")                    # staged, but not part of the run
+        out = root / "results" / "0001_2026-06-30" / "a.csv"
+        out.parent.mkdir(parents=True)
+        out.write_text("a\n")
+        assert run_store.commit_run([out], "13F run: CIK 0001, period 2026-06-30",
+                                    root, push=False) == "committed"
+        files = git("show", "--name-only", "--format=", "HEAD").stdout.decode().split()
+        assert files == ["results/0001_2026-06-30/a.csv"]
+        assert run_store.commit_run([out], "again", root, push=False) == "unchanged"
+    print("  commit_run commits only run files: PASS")
 
 
 if __name__ == "__main__":
@@ -310,4 +402,9 @@ if __name__ == "__main__":
     test_unchanged_share_count_is_not_an_increase()
     test_equity_thresholds_and_pct_ranking()
     test_lookup_tickers_with_mocked_openfigi()
+    test_same_period_reuses_store_without_lookup()
+    test_only_missing_cusips_are_looked_up()
+    test_new_period_does_fresh_lookup()
+    test_failed_lookup_is_flagged_and_not_recorded_as_not_found()
+    test_commit_run_commits_only_run_files()
     print("\nAll tests passed.")

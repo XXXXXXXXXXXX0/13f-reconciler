@@ -2,5 +2,7 @@ __pycache__/
 *.pyc
 *.pyo
 output/
-results/
+*.tmp
+# Stray CSVs are ignored; each run's results under results/ are committed.
 *.csv
+!results/**/*.csv

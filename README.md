@@ -7,8 +7,9 @@ fund manager, compares the most recent two quarters, and outputs the differences
 
 | File | Contents |
 |---|---|
-| `13f_changes_<CIK>_<period>.csv` | Every new, closed, and changed position sorted by absolute share-count change (largest first) |
-| `13f_summary_<CIK>_<period>.csv` | Count and aggregate market value for each category |
+| `results/<CIK>_<period>/13f_changes_<CIK>_<period>.csv` | Every new, closed, and changed position sorted by absolute share-count change (largest first) |
+| `results/<CIK>_<period>/13f_summary_<CIK>_<period>.csv` | Count and aggregate market value for each category, then the top-10 tables |
+| `tickers/<CIK>_<period>.json` | Tickers for the top-10 tables' CUSIPs, reused on later runs of the same period |
 
 ### Detail CSV columns
 
@@ -55,10 +56,29 @@ move in each direction (100 → 150 is +50%; 150 → 100 is −33%). There is no
 thresholds apply to the detail CSV, the summary counts and the tables. Calls, puts and bonds are
 not filtered.
 
-Tickers are looked up last, only for the rows in these tables (at most 130 CUSIPs); identifiers starting with a letter are
-sent as non-US CINS codes, via the
-free OpenFIGI API (`api.openfigi.com`; set `OPENFIGI_API_KEY` for higher limits). The detail
-CSV is not looked up. If the lookup fails, tickers stay blank.
+Tickers are looked up last, only for the CUSIPs in these tables, via the free OpenFIGI API
+(`api.openfigi.com`; set `OPENFIGI_API_KEY` for higher limits). Identifiers starting with a
+letter are sent as non-US CINS codes. The detail CSV is never looked up.
+
+### Ticker store (`tickers/<CIK>_<period>.json`)
+
+Before calling OpenFIGI, the run reads the store for that CIK and filing period:
+
+- **Same period:** stored tickers are reused, and only CUSIPs never asked about are looked up.
+  A repeat run of the same quarter makes zero OpenFIGI calls.
+- **New period:** a new file starts empty, so that quarter's CUSIPs are looked up fresh. This
+  picks up mergers, renames and restructurings. Earlier periods' files are left as they are.
+- CUSIPs OpenFIGI has no match for are stored under `not_found` and not retried in that period.
+- If a lookup errors partway (network, rate limit), the run stops with an error and writes and
+  commits nothing. A re-run reuses what is stored and retries the rest.
+
+### Saved results and commits
+
+Each complete run writes its CSVs to `results/<CIK>_<period>/` and the ticker store to
+`tickers/`, then commits exactly those files with the message
+`13F run: CIK <CIK>, period <period>` and pushes the current branch. A run that fails before the
+end commits nothing. If nothing changed since the last committed run, no commit is made. Use
+`--no-commit` to write files without committing.
 
 ### Summary CSV rows
 
@@ -85,8 +105,8 @@ python 13f_reconciler.py --cik 0001067983
 # By fund manager name (performs a search on EDGAR)
 python 13f_reconciler.py --name "Berkshire Hathaway"
 
-# Specify output directory and custom email for User-Agent
-python 13f_reconciler.py --cik 0001067983 --output ./results --email you@example.com
+# Custom email for the SEC User-Agent; write files without committing
+python 13f_reconciler.py --cik 0001067983 --email you@example.com --no-commit
 ```
 
 ### Finding a CIK
