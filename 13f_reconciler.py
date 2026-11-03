@@ -193,6 +193,12 @@ def main() -> None:
     id_grp.add_argument("--cik", help="SEC CIK number (e.g. 0001067983)")
     id_grp.add_argument("--name", help='Fund manager name to search for (e.g. "Berkshire Hathaway")')
     parser.add_argument(
+        "--period", metavar="YYYY-MM-DD",
+        help=("Filing period to treat as the current quarter (default: the newest). "
+              "It is compared with the period before it, e.g. --period 2026-03-31 "
+              "compares Q1 2026 with Q4 2025."),
+    )
+    parser.add_argument(
         "--no-commit", action="store_true",
         help="Write results and the ticker store but do not commit or push.",
     )
@@ -217,13 +223,12 @@ def main() -> None:
 
     # --- Discover filings ---
     print("Fetching 13F-HR filing list from SEC EDGAR...")
-    filings = rc.get_13f_filings(cik, max_filings=5)
-    if len(filings) < 2:
-        print("ERROR: Need at least 2 filings to compare.", file=sys.stderr)
+    filings = rc.get_13f_filings(cik, max_filings=12)   # ~3 years, for --period
+    try:
+        current_filing, prior_filing = rc.pick_filing_pair(filings, args.period)
+    except RuntimeError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
         sys.exit(1)
-
-    current_filing = filings[0]
-    prior_filing = filings[1]
     print(f"  Current quarter: period={current_filing.period}  filed={current_filing.filed}")
     print(f"  Prior quarter:   period={prior_filing.period}  filed={prior_filing.filed}")
 
@@ -279,11 +284,16 @@ def main() -> None:
     if args.no_commit:
         print("Skipping commit and README update (--no-commit).")
     else:
-        readme = run_store.REPO_ROOT / "README.md"
-        run_store.update_readme(readme, run_store.render_latest_results(
-            cik, period, prior_filing.period, top, summary_path))
+        paths = [detail_path, summary_path, store_path]
+        if run_store.has_newer_results(cik, period):
+            print("README 'Latest results' left as is: a later period is already saved.")
+        else:
+            readme = run_store.REPO_ROOT / "README.md"
+            run_store.update_readme(readme, run_store.render_latest_results(
+                cik, period, prior_filing.period, top, summary_path))
+            paths.append(readme)
         status = run_store.commit_run(
-            [detail_path, summary_path, store_path, readme],
+            paths,
             f"13F run: CIK {cik}, period {period}")
         print({"pushed": "Committed and pushed.",
                "unchanged": "No changes since the last committed run; nothing to commit."}
