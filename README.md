@@ -1,12 +1,13 @@
 # 13F Filing Reconciler
 
 Pulls 13F-HR filings from **SEC EDGAR** (no paid API required) for any institutional
-fund manager, compares the most recent two quarters, and outputs the differences to CSV.
+fund manager, compares the most recent two quarters (or any quarter with `--period`), and outputs the differences to CSV.
 
 ## Latest results
 
 Updated automatically by each committed run (`13f_reconciler.py` rewrites the text between the
-markers below). It shows whichever fund was run most recently.
+markers below). It shows whichever fund was run most recently; a `--period` run for an older
+quarter leaves it alone when a later period for that fund is already saved.
 
 <!-- latest-results:start -->
 CIK **0001009207**, period **2026-06-30** compared with **2026-03-31**. Full tables: [`results/0001009207_2026-06-30/13f_summary_0001009207_2026-06-30.csv`](results/0001009207_2026-06-30/13f_summary_0001009207_2026-06-30.csv).
@@ -143,6 +144,9 @@ python 13f_reconciler.py --cik 0001067983
 
 # By fund manager name (performs a search on EDGAR)
 python 13f_reconciler.py --name "Berkshire Hathaway"
+
+# Compare an earlier quarter with the one before it (here Q1 2026 vs Q4 2025)
+python 13f_reconciler.py --cik 0001067983 --period 2026-03-31
 
 # Custom email for the SEC User-Agent; write files without committing
 python 13f_reconciler.py --cik 0001067983 --email you@example.com --no-commit

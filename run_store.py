@@ -138,6 +138,12 @@ README_START = "<!-- latest-results:start -->"
 README_END = "<!-- latest-results:end -->"
 
 
+def has_newer_results(cik: str, period: str, root: Path = REPO_ROOT) -> bool:
+    """True if results/ already holds a later period for this CIK."""
+    return any(d.is_dir() and d.name.startswith(f"{cik}_") and d.name[len(cik) + 1:] > period
+               for d in (root / "results").glob(f"{cik}_*"))
+
+
 def render_latest_results(cik: str, period: str, prior_period: str,
                           top: dict, summary_path: Path, root: Path = REPO_ROOT) -> str:
     """Markdown for the newest run's equity increase / decrease tables."""

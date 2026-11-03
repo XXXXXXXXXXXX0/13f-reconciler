@@ -120,6 +120,29 @@ def get_13f_filings(cik: str, max_filings: int = 5) -> list[FilingMeta]:
     return results[:max_filings]
 
 
+def pick_filing_pair(filings: list[FilingMeta],
+                     period: Optional[str] = None) -> tuple[FilingMeta, FilingMeta]:
+    """
+    Choose (current, prior) from filings listed newest first.
+
+    current: the newest filing for `period` (YYYY-MM-DD), or the newest overall.
+    prior:   the newest filing for the next earlier period, so an amendment for
+             the same quarter is never compared against its own original.
+    """
+    if period:
+        matches = [f for f in filings if f.period == period]
+        if not matches:
+            have = ", ".join(sorted({f.period for f in filings}, reverse=True))
+            raise RuntimeError(f"No 13F-HR for period {period}. Periods available: {have}")
+        current = matches[0]
+    else:
+        current = filings[0]
+    prior = next((f for f in filings if f.period < current.period), None)
+    if prior is None:
+        raise RuntimeError(f"No filing for a period before {current.period} to compare with.")
+    return current, prior
+
+
 def _collect_filings(raw: dict, cik: str, out: list, limit: int) -> None:
     forms = raw.get("form", [])
     accessions = raw.get("accessionNumber", [])

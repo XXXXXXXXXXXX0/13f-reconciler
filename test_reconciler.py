@@ -109,6 +109,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from reconciler_core import (
     parse_info_table_xml, compare_holdings, FilingMeta, Holding,
     aggregate_holdings, top_movers, lookup_tickers, apply_equity_thresholds, TickerLookup,
+    pick_filing_pair,
 )
 import run_store
 
@@ -434,6 +435,34 @@ def test_detail_rows_security_type_and_tickers():
     print("  detail security type and tickers: PASS")
 
 
+def test_pick_filing_pair():
+    f = lambda period, filed: FilingMeta(accession=filed, period=period, filed=filed, primary_doc="")
+    filings = [f("2026-06-30", "2026-08-14"), f("2026-03-31", "2026-06-01"),   # amendment of Q1
+               f("2026-03-31", "2026-05-15"), f("2025-12-31", "2026-02-17")]
+    cur, pri = pick_filing_pair(filings)
+    assert (cur.period, pri.period, pri.filed) == ("2026-06-30", "2026-03-31", "2026-06-01")
+    cur, pri = pick_filing_pair(filings, "2026-03-31")
+    assert (cur.period, pri.period) == ("2026-03-31", "2025-12-31")   # not Q1 vs its amendment
+    for bad in ("2024-06-30", "2025-12-31"):                       # unknown / nothing earlier
+        try:
+            pick_filing_pair(filings, bad)
+            raise AssertionError(f"expected an error for {bad}")
+        except RuntimeError:
+            pass
+    print("  pick_filing_pair: PASS")
+
+
+def test_has_newer_results():
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        (root / "results" / "0001_2026-06-30").mkdir(parents=True)
+        (root / "results" / "0002_2027-03-31").mkdir(parents=True)        # other CIK
+        assert run_store.has_newer_results("0001", "2026-03-31", root)
+        assert not run_store.has_newer_results("0001", "2026-06-30", root)
+        assert not run_store.has_newer_results("0001", "2026-09-30", root)
+    print("  has_newer_results: PASS")
+
+
 if __name__ == "__main__":
     print("Running tests...")
     test_parse()
@@ -453,4 +482,6 @@ if __name__ == "__main__":
     test_commit_run_commits_only_run_files()
     test_readme_latest_results_section()
     test_detail_rows_security_type_and_tickers()
+    test_pick_filing_pair()
+    test_has_newer_results()
     print("\nAll tests passed.")
