@@ -1,0 +1,154 @@
+Category,Position Count,Aggregate Market Value ($)
+New Positions,670,"5,932,359,790"
+Closed Positions,690,"4,716,331,000"
+Changed - Increase,975,"35,823,245,511"
+Changed - Decrease,"1,399","50,076,146,015"
+Changed - No Change,19,"4,070,348"
+,,
+Total Changed (all directions),"2,393","85,903,461,874"
+GRAND TOTAL,"3,753",
+
+Section,Rank,Ticker,Issuer,CUSIP,Category,Prior Shares / Principal,Current Shares / Principal,Change,% Change
+
+Equity - Largest New (by shares),1,VG,VENTURE GLOBAL INC,92333F101,New,0,"13,410,074","13,410,074",
+Equity - Largest New (by shares),2,IBRX,IMMUNITYBIO INC,45256X103,New,0,"12,571,597","12,571,597",
+Equity - Largest New (by shares),3,SONY,SONY GROUP CORP,835699307,New,0,"3,581,856","3,581,856",
+Equity - Largest New (by shares),4,VALE,VALE S A,91912E105,New,0,"2,906,483","2,906,483",
+Equity - Largest New (by shares),5,BBD,BANCO BRADESCO S A,059460303,New,0,"2,616,238","2,616,238",
+Equity - Largest New (by shares),6,DOCU,DOCUSIGN INC,256163106,New,0,"2,501,812","2,501,812",
+Equity - Largest New (by shares),7,NEE,NEXTERA ENERGY INC,65339F655,New,0,"2,425,000","2,425,000",
+Equity - Largest New (by shares),8,ORCL,ORACLE CORP,68389X204,New,0,"2,421,500","2,421,500",
+Equity - Largest New (by shares),9,RDW,REDWIRE CORPORATION,75776W103,New,0,"2,176,381","2,176,381",
+Equity - Largest New (by shares),10,GDS,GDS HLDGS LTD,36165L108,New,0,"1,964,818","1,964,818",
+
+Equity - Largest Closed (by shares),1,HOUSEUR,ANYWHERE REAL ESTATE INC,75605Y106,Closed,"3,327,642",0,"-3,327,642",
+Equity - Largest Closed (by shares),2,8QR,CONFLUENT INC,20717M103,Closed,"2,957,770",0,"-2,957,770",
+Equity - Largest Closed (by shares),3,MCHP,MICROCHIP TECHNOLOGY INC.,595017104,Closed,"2,390,185",0,"-2,390,185",
+Equity - Largest Closed (by shares),4,PLYM,PLYMOUTH INDL REIT INC,729640102,Closed,"1,922,761",0,"-1,922,761",
+Equity - Largest Closed (by shares),5,EB4,EVENTBRITE INC,29975E109,Closed,"1,870,694",0,"-1,870,694",
+Equity - Largest Closed (by shares),6,FTW,EQV VENTURES ACQUISITION COR,G3106N109,Closed,"1,732,500",0,"-1,732,500",
+Equity - Largest Closed (by shares),7,VTYXUSD,VENTYX BIOSCIENCES INC,92332V107,Closed,"1,665,474",0,"-1,665,474",
+Equity - Largest Closed (by shares),8,FYBR,FRONTIER COMMUNICATIONS PARE,35909D109,Closed,"1,451,454",0,"-1,451,454",
+Equity - Largest Closed (by shares),9,,FRACTYL HEALTH INC,35168W103,Closed,"1,442,745",0,"-1,442,745",
+Equity - Largest Closed (by shares),10,SM,SM ENERGY CO,78454L100,Closed,"1,412,606",0,"-1,412,606",
+
+Equity - Largest Increases (by % change),1,HDB,HDFC BANK LTD,40415F101,Changed,"8,162","2,425,460","2,417,298","+29,616.5%"
+Equity - Largest Increases (by % change),2,SITM,SITIME CORP,82982T106,Changed,720,"116,835","116,115","+16,127.1%"
+Equity - Largest Increases (by % change),3,MGA,MAGNA INTL INC,559222401,Changed,"10,416","1,517,170","1,506,754","+14,465.8%"
+Equity - Largest Increases (by % change),4,PBA,PEMBINA PIPELINE CORP,706327103,Changed,"9,900","1,270,043","1,260,143","+12,728.7%"
+Equity - Largest Increases (by % change),5,BX,BLACKSTONE INC,09260D107,Changed,"31,481","3,781,729","3,750,248","+11,912.7%"
+Equity - Largest Increases (by % change),6,CRCL,CIRCLE INTERNET GROUP INC,172573107,Changed,"24,040","2,734,925","2,710,885","+11,276.6%"
+Equity - Largest Increases (by % change),7,WPC,WP CAREY INC,92936U109,Changed,"4,797","518,754","513,957","+10,714.1%"
+Equity - Largest Increases (by % change),8,FNF,FIDELITY NATL FINL INC,31620R303,Changed,"5,625","577,937","572,312","+10,174.4%"
+Equity - Largest Increases (by % change),9,ACN,ACCENTURE PLC IRELAND,G1151C101,Changed,"3,700","341,259","337,559","+9,123.2%"
+Equity - Largest Increases (by % change),10,VNET,VNET GROUP INC,90138A103,Changed,"27,972","2,527,174","2,499,202","+8,934.7%"
+
+Equity - Largest Decreases (by % change),1,BROS,DUTCH BROS INC,26701L100,Changed,"1,382,693","8,244","-1,374,449",-99.4%
+Equity - Largest Decreases (by % change),2,DXCM,DEXCOM INC,252131107,Changed,"3,938,568","27,732","-3,910,836",-99.3%
+Equity - Largest Decreases (by % change),3,,ASCENDIS PHARMA A/S,04351P101,Changed,"125,768","1,062","-124,706",-99.2%
+Equity - Largest Decreases (by % change),4,QCOM,QUALCOMM INC,747525103,Changed,"961,852","9,300","-952,552",-99.0%
+Equity - Largest Decreases (by % change),5,CGC,CANOPY GROWTH CORPORATION,138035704,Changed,"4,233,630","56,753","-4,176,877",-98.7%
+Equity - Largest Decreases (by % change),6,ARES,ARES MANAGEMENT CORPORATION,03990B101,Changed,"872,250","15,807","-856,443",-98.2%
+Equity - Largest Decreases (by % change),7,FRO,FRONTLINE PLC,M46528101,Changed,"360,668","6,705","-353,963",-98.1%
+Equity - Largest Decreases (by % change),8,AQST,AQUESTIVE THERAPEUTICS INC,03843E104,Changed,"941,197","18,149","-923,048",-98.1%
+Equity - Largest Decreases (by % change),9,ALLY,ALLY FINL INC,02005N100,Changed,"779,780","15,318","-764,462",-98.0%
+Equity - Largest Decreases (by % change),10,OPFI,OPPFI INC,68386H103,Changed,"1,049,673","26,051","-1,023,622",-97.5%
+
+Calls - Largest New (by underlying shares),1,ONDS,ONDAS INC,68236H204,New,0,"4,686,600","4,686,600",
+Calls - Largest New (by underlying shares),2,OWL,BLUE OWL CAPITAL INC,09581B103,New,0,"1,288,700","1,288,700",
+Calls - Largest New (by underlying shares),3,SPY,STATE STR SPDR S&P 500 ETF T,78462F103,New,0,"900,000","900,000",
+Calls - Largest New (by underlying shares),4,QQQ,INVESCO QQQ TR,46090E103,New,0,"750,000","750,000",
+Calls - Largest New (by underlying shares),5,USAR,USA RARE EARTH INC,91733P107,New,0,"500,000","500,000",
+Calls - Largest New (by underlying shares),6,CRCL,CIRCLE INTERNET GROUP INC,172573107,New,0,"482,300","482,300",
+Calls - Largest New (by underlying shares),7,,TASEKO MINES LTD,876511106,New,0,"466,000","466,000",
+Calls - Largest New (by underlying shares),8,IA,INNOVATIVE SOLUTIONS & SUPPO,45769N105,New,0,"435,900","435,900",
+Calls - Largest New (by underlying shares),9,BBAI,BIGBEAR AI HLDGS INC,08975B109,New,0,"360,000","360,000",
+Calls - Largest New (by underlying shares),10,CDE,COEUR MNG INC,192108504,New,0,"344,600","344,600",
+
+Calls - Largest Closed (by underlying shares),1,XPEV,XPENG INC,98422D105,Closed,"1,342,300",0,"-1,342,300",
+Calls - Largest Closed (by underlying shares),2,RGTI,RIGETTI COMPUTING INC,76655K103,Closed,"1,265,000",0,"-1,265,000",
+Calls - Largest Closed (by underlying shares),3,ENVX,ENOVIX CORPORATION,293594107,Closed,"503,600",0,"-503,600",
+Calls - Largest Closed (by underlying shares),4,AMC,AMC ENTMT HLDGS INC,00165C302,Closed,"406,600",0,"-406,600",
+Calls - Largest Closed (by underlying shares),5,,HONEYWELL INTL INC,438516106,Closed,"398,300",0,"-398,300",
+Calls - Largest Closed (by underlying shares),6,MPT,MEDICAL PPTYS TRUST INC,58463J304,Closed,"372,400",0,"-372,400",
+Calls - Largest Closed (by underlying shares),7,APA,APA CORPORATION,03743Q108,Closed,"346,300",0,"-346,300",
+Calls - Largest Closed (by underlying shares),8,CRGY,CRESCENT ENERGY COMPANY,44952J104,Closed,"343,690",0,"-343,690",
+Calls - Largest Closed (by underlying shares),9,SKYD,PARAMOUNT SKYDANCE CORP,69932A204,Closed,"307,900",0,"-307,900",
+Calls - Largest Closed (by underlying shares),10,CSCO,CISCO SYS INC,17275R102,Closed,"285,700",0,"-285,700",
+
+Calls - Largest Increases (by underlying shares),1,VALE,VALE S A,91912E105,Changed,"985,000","4,008,400","3,023,400",+306.9%
+Calls - Largest Increases (by underlying shares),2,TU,TELUS CORPORATION,87971M103,Changed,"2,925,000","4,417,500","1,492,500",+51.0%
+Calls - Largest Increases (by underlying shares),3,BABA,ALIBABA GROUP HLDG LTD,01609W102,Changed,"914,200","2,346,400","1,432,200",+156.7%
+Calls - Largest Increases (by underlying shares),4,GOOGL,ALPHABET INC,02079K305,Changed,"520,000","1,941,700","1,421,700",+273.4%
+Calls - Largest Increases (by underlying shares),5,GOOG,ALPHABET INC,02079K107,Changed,"448,600","1,765,700","1,317,100",+293.6%
+Calls - Largest Increases (by underlying shares),6,MARA,MARA HOLDINGS INC,565788106,Changed,"1,283,700","2,497,200","1,213,500",+94.5%
+Calls - Largest Increases (by underlying shares),7,PBR,PETROLEO BRASILEIRO S A,71654V408,Changed,"235,000","1,375,400","1,140,400",+485.3%
+Calls - Largest Increases (by underlying shares),8,ORCL,ORACLE CORP,68389X105,Changed,"114,300","1,253,800","1,139,500",+996.9%
+Calls - Largest Increases (by underlying shares),9,MSTR,STRATEGY INC,594972408,Changed,"462,500","1,299,700","837,200",+181.0%
+Calls - Largest Increases (by underlying shares),10,ENB,ENBRIDGE INC,29250N105,Changed,"848,900","1,468,700","619,800",+73.0%
+
+Calls - Largest Decreases (by underlying shares),1,OPEN,OPENDOOR TECHNOLOGIES INC,683712103,Changed,"9,687,500","3,423,200","-6,264,300",-64.7%
+Calls - Largest Decreases (by underlying shares),2,F,FORD MTR CO,345370860,Changed,"6,216,300","1,687,200","-4,529,100",-72.9%
+Calls - Largest Decreases (by underlying shares),3,RIVN,RIVIAN AUTOMOTIVE INC,76954A103,Changed,"8,605,100","5,137,800","-3,467,300",-40.3%
+Calls - Largest Decreases (by underlying shares),4,AAL,AMERICAN AIRLINES GROUP INC,02376R102,Changed,"5,718,900","2,817,900","-2,901,000",-50.7%
+Calls - Largest Decreases (by underlying shares),5,WBD*,WARNER BROS DISCOVERY INC,934423104,Changed,"2,693,800","279,300","-2,414,500",-89.6%
+Calls - Largest Decreases (by underlying shares),6,SOUN,SOUNDHOUND AI INC,836100107,Changed,"4,312,800","1,943,000","-2,369,800",-54.9%
+Calls - Largest Decreases (by underlying shares),7,HIMS,HIMS & HERS HEALTH INC,433000106,Changed,"3,048,500","767,500","-2,281,000",-74.8%
+Calls - Largest Decreases (by underlying shares),8,NU,NU HLDGS LTD,G6683N103,Changed,"2,650,100","533,200","-2,116,900",-79.9%
+Calls - Largest Decreases (by underlying shares),9,LYFT,LYFT INC,55087P104,Changed,"2,466,400","490,700","-1,975,700",-80.1%
+Calls - Largest Decreases (by underlying shares),10,ASTS,AST SPACEMOBILE INC,00217D100,Changed,"3,110,100","1,148,500","-1,961,600",-63.1%
+
+Puts - Largest New (by underlying shares),1,BKLN,INVESCO EXCH TRADED FD TR II,46138G508,New,0,"10,000,000","10,000,000",
+Puts - Largest New (by underlying shares),2,CDE,COEUR MNG INC,192108504,New,0,"604,900","604,900",
+Puts - Largest New (by underlying shares),3,PAAS,PAN AMERN SILVER CORP,697900108,New,0,"442,600","442,600",
+Puts - Largest New (by underlying shares),4,FVRR,FIVERR INTL LTD,M4R82T106,New,0,"344,100","344,100",
+Puts - Largest New (by underlying shares),5,BLMN,BLOOMIN BRANDS INC,094235108,New,0,"326,200","326,200",
+Puts - Largest New (by underlying shares),6,OKLO,OKLO INC,02156V109,New,0,"285,000","285,000",
+Puts - Largest New (by underlying shares),7,BULL,WEBULL CORP,G9572D103,New,0,"270,700","270,700",
+Puts - Largest New (by underlying shares),8,ERO,ERO COPPER CORP,296006109,New,0,"250,000","250,000",
+Puts - Largest New (by underlying shares),9,SPT,SPROUT SOCIAL INC,85209W109,New,0,"232,100","232,100",
+Puts - Largest New (by underlying shares),10,NEXT,NEXTDECADE CORP,65342K105,New,0,"200,000","200,000",
+
+Puts - Largest Closed (by underlying shares),1,WEN,WENDYS CO,95058W100,Closed,"600,000",0,"-600,000",
+Puts - Largest Closed (by underlying shares),2,SHOP,SHOPIFY INC,82509L107,Closed,"497,100",0,"-497,100",
+Puts - Largest Closed (by underlying shares),3,ABNB,AIRBNB INC,009066101,Closed,"486,700",0,"-486,700",
+Puts - Largest Closed (by underlying shares),4,AEO,AMERICAN EAGLE OUTFITTERS IN,02553E106,Closed,"347,900",0,"-347,900",
+Puts - Largest Closed (by underlying shares),5,XPEV,XPENG INC,98422D105,Closed,"337,600",0,"-337,600",
+Puts - Largest Closed (by underlying shares),6,MANU,MANCHESTER UTD PLC NEW,G5784H106,Closed,"309,800",0,"-309,800",
+Puts - Largest Closed (by underlying shares),7,OVV,OVINTIV INC,69047Q102,Closed,"306,100",0,"-306,100",
+Puts - Largest Closed (by underlying shares),8,UUUU,ENERGY FUELS INC,292671708,Closed,"300,000",0,"-300,000",
+Puts - Largest Closed (by underlying shares),9,OLA,ORLA MNG LTD NEW,68634K106,Closed,"300,000",0,"-300,000",
+Puts - Largest Closed (by underlying shares),10,8QR,CONFLUENT INC,20717M103,Closed,"288,200",0,"-288,200",
+
+Puts - Largest Increases (by underlying shares),1,AG,FIRST MAJESTIC SILVER CORP,32076V103,Changed,"28,200","2,300,100","2,271,900","+8,056.4%"
+Puts - Largest Increases (by underlying shares),2,CRWV,COREWEAVE INC,21873S108,Changed,"744,700","2,376,400","1,631,700",+219.1%
+Puts - Largest Increases (by underlying shares),3,SNAP,SNAP INC,83304A106,Changed,"1,075,000","2,601,700","1,526,700",+142.0%
+Puts - Largest Increases (by underlying shares),4,CPNG,COUPANG INC,22266T109,Changed,"33,900","1,459,900","1,426,000","+4,206.5%"
+Puts - Largest Increases (by underlying shares),5,HOOD,ROBINHOOD MKTS INC,770700102,Changed,"1,388,500","2,489,300","1,100,800",+79.3%
+Puts - Largest Increases (by underlying shares),6,RCI,ROGERS COMMUNICATIONS INC,775109200,Changed,"3,362,400","4,314,600","952,200",+28.3%
+Puts - Largest Increases (by underlying shares),7,CRCL,CIRCLE INTERNET GROUP INC,172573107,Changed,"190,000","1,026,800","836,800",+440.4%
+Puts - Largest Increases (by underlying shares),8,HL,HECLA MINING COMPANY,422704106,Changed,"30,200","739,300","709,100","+2,348.0%"
+Puts - Largest Increases (by underlying shares),9,MSFT,MICROSOFT CORP,594918104,Changed,"713,200","1,365,000","651,800",+91.4%
+Puts - Largest Increases (by underlying shares),10,COIN,COINBASE GLOBAL INC,19260Q107,Changed,"791,500","1,431,500","640,000",+80.9%
+
+Puts - Largest Decreases (by underlying shares),1,TTD,THE TRADE DESK INC,88339J105,Changed,"5,054,000","1,706,600","-3,347,400",-66.2%
+Puts - Largest Decreases (by underlying shares),2,F,FORD MTR CO,345370860,Changed,"6,156,400","3,339,300","-2,817,100",-45.8%
+Puts - Largest Decreases (by underlying shares),3,RIVN,RIVIAN AUTOMOTIVE INC,76954A103,Changed,"2,569,500","150,000","-2,419,500",-94.2%
+Puts - Largest Decreases (by underlying shares),4,DKNG,DRAFTKINGS INC NEW,26142V105,Changed,"2,887,200","497,300","-2,389,900",-82.8%
+Puts - Largest Decreases (by underlying shares),5,NIO,NIO INC,62914V106,Changed,"3,400,000","1,592,600","-1,807,400",-53.2%
+Puts - Largest Decreases (by underlying shares),6,TD,TORONTO DOMINION BK ONT,891160509,Changed,"4,918,500","3,167,000","-1,751,500",-35.6%
+Puts - Largest Decreases (by underlying shares),7,MRNA,MODERNA INC,60770K107,Changed,"4,111,100","2,417,000","-1,694,100",-41.2%
+Puts - Largest Decreases (by underlying shares),8,CMG,CHIPOTLE MEXICAN GRILL INC,169656105,Changed,"2,608,900","1,068,500","-1,540,400",-59.0%
+Puts - Largest Decreases (by underlying shares),9,MRVL,MARVELL TECHNOLOGY INC,573874104,Changed,"3,272,100","1,802,100","-1,470,000",-44.9%
+Puts - Largest Decreases (by underlying shares),10,INTC,INTEL CORP,458140100,Changed,"4,257,400","2,904,600","-1,352,800",-31.8%
+
+Bonds - Largest New (by principal),1,MSTR,STRATEGY INC,594972AU5,New,0,"456,995,000","456,995,000",
+Bonds - Largest New (by principal),2,SMCI,SUPER MICRO COMPUTER INC,86800UAD6,New,0,"75,781,000","75,781,000",
+Bonds - Largest New (by principal),3,BBIO,BRIDGEBIO PHARMA INC,10806XAJ1,New,0,"62,780,000","62,780,000",
+Bonds - Largest New (by principal),4,IDCC,INTERDIGITAL INC,45867GAD3,New,0,"51,837,000","51,837,000",
+Bonds - Largest New (by principal),5,WEC,WEC ENERGY GROUP INC,92939UAR7,New,0,"30,958,000","30,958,000",
+Bonds - Largest New (by principal),6,SMCI,SUPER MICRO COMPUTER INC,86800UAB0,New,0,"29,750,000","29,750,000",
+Bonds - Largest New (by principal),7,PAR,PAR TECHNOLOGY CORP,698884AH6,New,0,"28,334,000","28,334,000",
+Bonds - Largest New (by principal),8,SPR,SPIRIT AEROSYSTEMS INC,85205TAQ3,New,0,"26,547,000","26,547,000",
+Bonds - Largest New (by principal),9,CAKE,CHEESECAKE FACTORY INC,163072AC5,New,0,"18,971,000","18,971,000",
+Bonds - Largest New (by principal),10,IQ,IQIYI INC,46267XAK4,New,0,"17,400,000","17,400,000",
